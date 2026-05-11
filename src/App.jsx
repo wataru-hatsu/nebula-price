@@ -3332,12 +3332,12 @@ export default function App() {
 
                     {/* 交渉アシスタント */}
                     {result.isExpensive && negotiateCountry && (
-                      <div style={{ marginTop:16, background:"linear-gradient(135deg,#fff7ed,#fef3c7)", border:`2px solid #f59e0b`, borderRadius:16, padding:16 }}>
-                        <div style={{ fontSize:14, fontWeight:800, color:"#ffd9b8", marginBottom:4 }}>💬 {t.negotiateTitle}</div>
+                      <div style={{ marginTop:16, background:"rgba(255,255,255,0.06)", backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"2px solid rgba(255,140,66,0.55)", borderRadius:16, padding:16, boxShadow:"0 4px 24px rgba(255,140,66,0.15)" }}>
+                        <div style={{ fontSize:14, fontWeight:800, color:"#ffb380", marginBottom:4 }}>💬 {t.negotiateTitle}</div>
                         <div style={{ fontSize:11, color:"rgba(255,255,255,0.85)", marginBottom:14, lineHeight:1.5 }}>{t.negotiateDesc} ({negotiateCountry.flag} {negotiateCountry.localLangName})</div>
                         <div style={{ marginBottom:12 }}>
-                          <div style={{ fontSize:10, color:"#ffd9b8", fontWeight:700, marginBottom:6 }}>🗣️ {t.negotiateYou}</div>
-                          <textarea value={negYouText} onChange={e => setNegYouText(e.target.value)} placeholder={t.negYouPh} style={{ width:"100%", background:"rgba(255,255,255,0.7)", border:"1.5px solid #f59e0b", borderRadius:9, padding:"8px 11px", fontSize:12, fontFamily:"inherit", resize:"vertical", minHeight:54, outline:"none", boxSizing:"border-box", marginBottom:6 }} />
+                          <div style={{ fontSize:11, color:"#ffb380", fontWeight:700, marginBottom:6 }}>🗣️ {t.negotiateYou}</div>
+                          <textarea value={negYouText} onChange={e => setNegYouText(e.target.value)} placeholder={t.negYouPh} style={{ width:"100%", background:"rgba(255,255,255,0.10)", border:"1.5px solid rgba(255,140,66,0.4)", borderRadius:9, padding:"8px 11px", fontSize:12, fontFamily:"inherit", resize:"vertical", minHeight:54, outline:"none", boxSizing:"border-box", marginBottom:6, color:"#fff" }} />
                           <div style={{ display:"flex", gap:6 }}>
                             <div style={{ flex:1 }}>
                               <HoldMicButton
@@ -3352,7 +3352,7 @@ export default function App() {
                             </button>
                           </div>
                           {negYouTranslated && (
-                            <div style={{ marginTop:8, padding:10, background:"rgba(52,211,153,0.25)", borderRadius:10 }}>
+                            <div style={{ marginTop:8, padding:10, background:"rgba(52,211,153,0.20)", border:"1px solid rgba(52,211,153,0.4)", borderRadius:10 }}>
                               <div style={{ fontSize:14, fontWeight:700, color:"#fff", marginBottom:6 }}>{negYouTranslated}</div>
                               <div style={{ display:"flex", gap:6 }}>
                                 <button onClick={() => speakText(negYouTranslated, negotiateCountry.localLang)} style={{ flex:1, padding:"7px", background:"rgba(255,255,255,0.15)", border:"1.5px solid rgba(255,255,255,0.3)", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer", color:"#fff" }}>🔊 {t.transSpeak}</button>
@@ -3362,8 +3362,8 @@ export default function App() {
                           )}
                         </div>
                         <div>
-                          <div style={{ fontSize:10, color:"#ffd9b8", fontWeight:700, marginBottom:6 }}>👂 {t.negotiatePartner}</div>
-                          <textarea value={negPartnerText} onChange={e => setNegPartnerText(e.target.value)} placeholder={`${negotiateCountry.flag} ${negotiateCountry.localLangName}...`} style={{ width:"100%", background:"rgba(255,255,255,0.7)", border:"1.5px solid #f59e0b", borderRadius:9, padding:"8px 11px", fontSize:12, fontFamily:"inherit", resize:"vertical", minHeight:54, outline:"none", boxSizing:"border-box", marginBottom:6 }} />
+                          <div style={{ fontSize:11, color:"#ffb380", fontWeight:700, marginBottom:6 }}>👂 {t.negotiatePartner}</div>
+                          <textarea value={negPartnerText} onChange={e => setNegPartnerText(e.target.value)} placeholder={`${negotiateCountry.flag} ${negotiateCountry.localLangName}...`} style={{ width:"100%", background:"rgba(255,255,255,0.10)", border:"1.5px solid rgba(255,140,66,0.4)", borderRadius:9, padding:"8px 11px", fontSize:12, fontFamily:"inherit", resize:"vertical", minHeight:54, outline:"none", boxSizing:"border-box", marginBottom:6, color:"#fff" }} />
                           <div style={{ display:"flex", gap:6 }}>
                             <div style={{ flex:1 }}>
                               <HoldMicButton
@@ -3378,7 +3378,7 @@ export default function App() {
                             </button>
                           </div>
                           {negPartnerTranslated && (
-                            <div style={{ marginTop:8, padding:10, background:"rgba(96,176,232,0.30)", borderRadius:10 }}>
+                            <div style={{ marginTop:8, padding:10, background:"rgba(96,176,232,0.20)", border:"1px solid rgba(96,176,232,0.4)", borderRadius:10 }}>
                               <div style={{ fontSize:14, fontWeight:700, color:"#fff" }}>💬 {negPartnerTranslated}</div>
                             </div>
                           )}
