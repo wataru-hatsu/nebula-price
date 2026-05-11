@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 // SPEECH SYNTHESIS
 // ─────────────────────────────────────────────────────────
 function speakText(text, langCode) {
-  if (!window.speechSynthesis) return;
+  if (!window.speechSynthesis || !text) return;
+  // 既存の発話をキャンセル
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   const map = {
@@ -14,9 +15,26 @@ function speakText(text, langCode) {
     tr:"tr-TR", ru:"ru-RU", nl:"nl-NL", fi:"fi-FI", no:"nb-NO",
     el:"el-GR", mn:"mn-MN", km:"km-KH", lo:"lo-LA",
   };
-  u.lang = map[langCode] || "en-US";
-  u.rate = 0.85;
-  window.speechSynthesis.speak(u);
+  const targetLang = map[langCode] || "en-US";
+  u.lang = targetLang;
+  u.rate = 0.9;
+  u.pitch = 1.0;
+  u.volume = 1.0;
+
+  // 利用可能な音声から最適なものを選ぶ
+  const voices = window.speechSynthesis.getVoices();
+  if (voices && voices.length > 0) {
+    // 厳密一致
+    let v = voices.find(vo => vo.lang === targetLang);
+    // 言語コードだけで一致 (例: en-US -> en-*)
+    if (!v) v = voices.find(vo => vo.lang.startsWith(targetLang.split("-")[0]));
+    if (v) u.voice = v;
+  }
+
+  // iOSで初回再生がよく失敗するので少し遅延させる
+  setTimeout(() => {
+    try { window.speechSynthesis.speak(u); } catch(e) { console.error("speak failed:", e); }
+  }, 50);
 }
 
 // マイク開始/終了の効果音（ピロン音）
@@ -70,22 +88,31 @@ function playBeep(type) {
 // ANTHROPIC API TRANSLATION
 // ─────────────────────────────────────────────────────────
 async function translateText(text, fromLang, toLang, toLocalName) {
+  if (!text || !text.trim()) return "";
+  // 同じ言語なら翻訳不要
+  if (fromLang === toLang) return text;
+  // MyMemory Translation API (無料・APIキー不要・CORS対応)
+  // 言語コードマッピング (BCP-47形式)
+  const langMap = {
+    ja:"ja", en:"en", zh:"zh-CN", ko:"ko", es:"es", pt:"pt-BR",
+    th:"th", vi:"vi", id:"id", ms:"ms", hi:"hi", fr:"fr", it:"it",
+    de:"de", ar:"ar", tr:"tr", ru:"ru", nl:"nl", fi:"fi", no:"no",
+    el:"el", mn:"mn", km:"km", lo:"lo",
+  };
+  const from = langMap[fromLang] || "en";
+  const to = langMap[toLang] || "en";
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 300,
-        messages: [{
-          role: "user",
-          content: `Translate the following text to ${toLocalName} (language code: ${toLang}). This is for travel/price negotiation context. Return ONLY the translated text, nothing else, no explanations.\n\nText: ${text}`
-        }]
-      })
-    });
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
+    const res = await fetch(url);
     const data = await res.json();
-    return data.content?.[0]?.text?.trim() || "";
-  } catch { return ""; }
+    if (data?.responseData?.translatedText) {
+      return data.responseData.translatedText;
+    }
+    return "";
+  } catch (err) {
+    console.error("Translation error:", err);
+    return "";
+  }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -1551,9 +1578,9 @@ function getPriceInfo(country, city, catId, subCatJa, dist, time, lang) {
 }
 
 function judgeVerdict(amount, min, avg, max, t) {
-  if (amount<=avg*0.75) return {verdict:t.cheap,emoji:"🤩",color:"#006e52",bg:"#e0f5ef",pct:Math.round((1-amount/avg)*100)};
-  if (amount<=avg*1.25) return {verdict:t.normal,emoji:"😊",color:"#7a5e00",bg:"#fdf6d8",pct:0};
-  return {verdict:t.exp,emoji:"😮",color:"#b84800",bg:"#fdeee0",pct:Math.round((amount/avg-1)*100)};
+  if (amount<=avg*0.75) return {verdict:t.cheap,emoji:"🤩",color:"#6ee7b7",bg:"#e0f5ef",pct:Math.round((1-amount/avg)*100)};
+  if (amount<=avg*1.25) return {verdict:t.normal,emoji:"😊",color:"#fde68a",bg:"#fdf6d8",pct:0};
+  return {verdict:t.exp,emoji:"😮",color:"#fdba74",bg:"#fdeee0",pct:Math.round((amount/avg-1)*100)};
 }
 
 // ─────────────────────────────────────────────────────────
@@ -2421,12 +2448,28 @@ const TREND_DATA = [
 // DESIGN SYSTEM
 // ─────────────────────────────────────────────────────────
 const S = {
-  accent:"#1a56a0", accentLight:"#3b82d4", light:"#60b0e8",
-  muted:"#6b6560", border:"#d4cec8", bg:"#f5f3ee",
-  card:"#ffffff", tag:"#eceae4",
-  cheap:"#006e52", normal:"#7a5e00", expensive:"#b84800",
+  // メインの色
+  accent:"#60b0e8", accentLight:"#a8d9f5", light:"#c4e3f7",
+  // ピンク（選択中・アクセント用）
+  pink:"#f472b6", pinkLight:"#fbcfe8", pinkDeep:"#ec4899",
+  // テキスト色
+  textWhite:"#ffffff", textSoft:"rgba(255,255,255,0.85)", textMuted:"rgba(255,255,255,0.6)",
+  // 旧名互換
+  muted:"rgba(255,255,255,0.6)",
+  // ボーダー（半透明白）
+  border:"rgba(255,255,255,0.25)", borderStrong:"rgba(255,255,255,0.4)",
+  bg:"#0a1a2e",
+  // カードは半透明ガラス調
+  card:"rgba(255,255,255,0.08)",
+  cardStrong:"rgba(255,255,255,0.14)",
+  tag:"rgba(255,255,255,0.10)",
+  // ステータスカラー（明るくして紺背景でも読める）
+  cheap:"#34d399", normal:"#fbbf24", expensive:"#fb923c",
+  // 背景グラデ
   grad:"linear-gradient(165deg,#0a1a2e 0%,#16213e 50%,#1a3a5c 100%)",
   emerald:"linear-gradient(145deg,#052e1c,#065f46)",
+  // アクセントオレンジ
+  orange:"#ffb380", orangeDeep:"#ff8c42",
 };
 
 // ─────────────────────────────────────────────────────────
@@ -2516,6 +2559,11 @@ export default function App() {
       if (rates) { setLiveRates(rates); setRateStatus("live"); } else setRateStatus("fallback");
       try { const s = localStorage.getItem("nebula_posts"); if (s) setPosts(JSON.parse(s)); } catch {}
     })();
+    // 音声合成の voices を先に読み込む（iOSでは非同期）
+    if (window.speechSynthesis) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    }
   }, []);
 
   useEffect(() => {
@@ -2551,7 +2599,7 @@ export default function App() {
   const submitPost = () => {
     if (!postItem && !postText && !postPhoto) { showToast(t.noCmp); return; }
     const idx = (globalCountry?.cities?.ja || []).indexOf(city);
-    const cityLabel = (globalCountry?.cities?.en || globalCountry?.cities?.ja || [])[idx >= 0 ? idx : 0] || city || "";
+    const cityLabel = (globalCountry?.cities?.[lang] || globalCountry?.cities?.ja || [])[idx >= 0 ? idx : 0] || city || "";
     const np = {
       item: postItem,
       price: postPrice,
@@ -2727,7 +2775,7 @@ export default function App() {
       const q = countrySearch.trim().toUpperCase();
       list = list.filter(c => {
         const engName = c.name.replace(/[^\x00-\x7F]/g, "");
-        const label = (c.label?.en || c.name);
+        const label = (c.label?.[lang] || c.label?.en || c.name);
         return label.toUpperCase().startsWith(q) || c.name.startsWith(q);
       });
     }
@@ -2740,7 +2788,7 @@ export default function App() {
   };
 
   const Pill = ({ selected, onClick, children, small }) => (
-    <button onClick={onClick} style={{ padding: small ? "6px 11px" : "9px 14px", background: selected ? S.accent : S.tag, border: `1.5px solid ${selected ? S.accent : S.border}`, borderRadius: 24, fontSize: small ? 11 : 13, cursor: "pointer", color: selected ? "#fff" : "#1a1a14", whiteSpace: "nowrap", fontWeight: selected ? 700 : 400, transition: "all 0.2s" }}>
+    <button onClick={onClick} style={{ padding: small ? "6px 11px" : "9px 14px", background: selected ? S.pink : S.tag, border: `1.5px solid ${selected ? S.pink : S.border}`, borderRadius: 24, fontSize: small ? 11 : 13, cursor: "pointer", color: "#fff", whiteSpace: "nowrap", fontWeight: selected ? 700 : 400, transition: "all 0.2s" }}>
       {children}
     </button>
   );
@@ -2868,63 +2916,116 @@ export default function App() {
   const hText = helpTexts[lang] || helpTexts.en;
 
   return (
-    <div style={{ background: S.bg, minHeight:"100vh", fontFamily:"'Noto Sans JP','DM Sans',sans-serif", paddingBottom:90 }}>
+    <div style={{ background: S.grad, minHeight:"100vh", fontFamily:"'Noto Sans JP','DM Sans',sans-serif", paddingBottom:90 }}>
       {/* ── Inline CSS for mic animations ── */}
       <style>{`
         @keyframes npbar { 0%,100%{transform:scaleY(0.4)} 50%{transform:scaleY(1)} }
         @keyframes nppulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
         @keyframes nprotate { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @keyframes npaurora { 0%,100%{opacity:0.5} 50%{opacity:0.85} }
+        /* All cards: glass effect */
+        .np-glass {
+          backdrop-filter: blur(14px) saturate(140%);
+          -webkit-backdrop-filter: blur(14px) saturate(140%);
+          border: 1px solid rgba(255,255,255,0.18);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+        }
+        /* Input & textarea: white text on dark glass */
+        input, textarea {
+          color: #ffffff !important;
+          caret-color: #ffffff;
+        }
+        input::placeholder, textarea::placeholder {
+          color: rgba(255,255,255,0.55) !important;
+        }
+        /* Hide native autofill background */
+        input:-webkit-autofill {
+          -webkit-text-fill-color: #ffffff;
+          -webkit-box-shadow: 0 0 0 1000px rgba(255,255,255,0.05) inset;
+        }
       `}</style>
-      {/* ── A-5 Midnight Ocean background (stars + meridians + airplane trail) ── */}
-      <div style={{ position:"fixed", top:0, left:0, right:0, height:380, background:S.grad, zIndex:0, overflow:"hidden" }}>
-        <svg viewBox="0 0 400 380" preserveAspectRatio="xMidYMid slice" style={{ position:"absolute", inset:0, width:"100%", height:"100%" }}>
+      {/* ── A-5 Midnight Ocean background (full screen, large globe, aurora) ── */}
+      <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:S.grad, zIndex:0, overflow:"hidden" }}>
+        <svg viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice" style={{ position:"absolute", inset:0, width:"100%", height:"100%" }}>
           <defs>
-            <radialGradient id="npGlow" cx="20%" cy="20%" r="55%">
-              <stop offset="0%" stopColor="#60b0e8" stopOpacity="0.22"/>
+            <radialGradient id="npGlow" cx="15%" cy="15%" r="60%">
+              <stop offset="0%" stopColor="#60b0e8" stopOpacity="0.35"/>
               <stop offset="100%" stopColor="#60b0e8" stopOpacity="0"/>
             </radialGradient>
-            <radialGradient id="npGlow2" cx="85%" cy="35%" r="45%">
-              <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.16"/>
+            <radialGradient id="npGlow2" cx="85%" cy="40%" r="55%">
+              <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.30"/>
               <stop offset="100%" stopColor="#a78bfa" stopOpacity="0"/>
             </radialGradient>
+            <radialGradient id="npGlow3" cx="50%" cy="85%" r="60%">
+              <stop offset="0%" stopColor="#34d399" stopOpacity="0.18"/>
+              <stop offset="100%" stopColor="#34d399" stopOpacity="0"/>
+            </radialGradient>
+            <linearGradient id="npAurora1" x1="0" y1="0" x2="1" y2="0.5">
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0"/>
+              <stop offset="50%" stopColor="#10b981" stopOpacity="0.22"/>
+              <stop offset="100%" stopColor="#a78bfa" stopOpacity="0.22"/>
+            </linearGradient>
+            <linearGradient id="npAurora2" x1="0" y1="0" x2="1" y2="0.3">
+              <stop offset="0%" stopColor="#60b0e8" stopOpacity="0"/>
+              <stop offset="50%" stopColor="#60b0e8" stopOpacity="0.28"/>
+              <stop offset="100%" stopColor="#34d399" stopOpacity="0.18"/>
+            </linearGradient>
             <linearGradient id="npTrail" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="#60b0e8" stopOpacity="0"/>
-              <stop offset="50%" stopColor="#60b0e8" stopOpacity="0.45"/>
+              <stop offset="50%" stopColor="#60b0e8" stopOpacity="0.5"/>
               <stop offset="100%" stopColor="#60b0e8" stopOpacity="0.05"/>
             </linearGradient>
             <linearGradient id="npTrail2" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="#a78bfa" stopOpacity="0"/>
-              <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.25"/>
+              <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.3"/>
               <stop offset="100%" stopColor="#a78bfa" stopOpacity="0"/>
             </linearGradient>
           </defs>
-          {/* Aurora glow overlays */}
-          <rect width="400" height="380" fill="url(#npGlow)"/>
-          <rect width="400" height="380" fill="url(#npGlow2)"/>
-          {/* Globe meridians/latitudes (very subtle) */}
-          <g opacity="0.07" stroke="#60b0e8" strokeWidth="0.8" fill="none">
-            <ellipse cx="200" cy="190" rx="200" ry="200"/>
-            <ellipse cx="200" cy="190" rx="140" ry="200"/>
-            <ellipse cx="200" cy="190" rx="80" ry="200"/>
-            <ellipse cx="200" cy="190" rx="20" ry="200"/>
-            <ellipse cx="200" cy="190" rx="200" ry="70"/>
-            <ellipse cx="200" cy="190" rx="200" ry="140"/>
+          {/* Multi-layered aurora glows */}
+          <rect width="400" height="800" fill="url(#npGlow)"/>
+          <rect width="400" height="800" fill="url(#npGlow2)"/>
+          <rect width="400" height="800" fill="url(#npGlow3)"/>
+          {/* Aurora wave bands */}
+          <path d="M 0 120 Q 100 80 200 130 T 400 120 L 400 200 Q 300 240 200 200 T 0 220 Z" fill="url(#npAurora1)" opacity="0.7"/>
+          <path d="M 0 460 Q 120 420 220 470 T 400 460 L 400 550 Q 280 590 180 540 T 0 560 Z" fill="url(#npAurora2)" opacity="0.6"/>
+          {/* LARGE globe meridians/latitudes - more prominent */}
+          <g opacity="0.13" stroke="#60b0e8" strokeWidth="1.2" fill="none">
+            <ellipse cx="200" cy="400" rx="320" ry="320"/>
+            <ellipse cx="200" cy="400" rx="260" ry="320"/>
+            <ellipse cx="200" cy="400" rx="180" ry="320"/>
+            <ellipse cx="200" cy="400" rx="90" ry="320"/>
+            <ellipse cx="200" cy="400" rx="320" ry="100"/>
+            <ellipse cx="200" cy="400" rx="320" ry="200"/>
+            <ellipse cx="200" cy="400" rx="320" ry="270"/>
+          </g>
+          {/* Second smaller globe top-left */}
+          <g opacity="0.08" stroke="#a78bfa" strokeWidth="1" fill="none">
+            <ellipse cx="60" cy="120" rx="80" ry="80"/>
+            <ellipse cx="60" cy="120" rx="50" ry="80"/>
+            <ellipse cx="60" cy="120" rx="80" ry="30"/>
+            <ellipse cx="60" cy="120" rx="80" ry="55"/>
           </g>
           {/* Airplane trails */}
-          <path d="M -20 220 Q 200 90 420 260" stroke="url(#npTrail)" strokeWidth="1.5" fill="none" strokeDasharray="3,4" opacity="0.65"/>
-          <path d="M -20 320 Q 200 200 420 60" stroke="url(#npTrail2)" strokeWidth="1.2" fill="none" strokeDasharray="2,3" opacity="0.45"/>
-          {/* Stars */}
+          <path d="M -20 220 Q 200 90 420 260" stroke="url(#npTrail)" strokeWidth="1.8" fill="none" strokeDasharray="4,5" opacity="0.7"/>
+          <path d="M -20 600 Q 200 470 420 640" stroke="url(#npTrail2)" strokeWidth="1.3" fill="none" strokeDasharray="3,4" opacity="0.55"/>
+          <path d="M -20 380 Q 200 280 420 100" stroke="url(#npTrail)" strokeWidth="1" fill="none" strokeDasharray="2,4" opacity="0.4"/>
+          {/* Stars - more, denser */}
           {[
-            [40,30,0.8,0.8],[120,25,0.5,0.6],[200,40,1.2,0.9],[280,20,0.7,0.7],
-            [340,50,0.5,0.5],[370,80,0.8,0.6],[50,180,0.6,0.5],[160,220,0.5,0.4],
-            [320,190,0.7,0.6],[380,240,0.5,0.5],[30,280,0.6,0.4],[250,290,0.5,0.5],
-            [90,60,0.5,0.5],[170,90,0.6,0.6],[300,120,0.7,0.7],[60,330,0.6,0.5],
-            [200,340,0.5,0.4],[360,330,0.7,0.6],[110,300,0.5,0.4],[230,160,0.6,0.5],
+            [40,30,0.8,0.8],[120,25,0.6,0.7],[200,40,1.2,0.9],[280,20,0.7,0.7],
+            [340,50,0.5,0.5],[370,80,0.9,0.7],[50,180,0.6,0.5],[160,220,0.5,0.4],
+            [320,190,0.8,0.7],[380,240,0.5,0.5],[30,280,0.6,0.4],[250,290,0.5,0.5],
+            [90,60,0.5,0.5],[170,90,0.6,0.6],[300,120,0.7,0.7],[60,330,0.7,0.6],
+            [200,340,0.6,0.5],[360,330,0.8,0.7],[110,300,0.5,0.4],[230,160,0.7,0.6],
+            [25,420,0.6,0.5],[150,440,0.5,0.4],[280,460,0.7,0.6],[380,420,0.6,0.5],
+            [70,520,0.5,0.4],[200,540,0.8,0.7],[330,560,0.6,0.5],[100,620,0.7,0.6],
+            [240,650,0.5,0.4],[370,680,0.6,0.5],[40,720,0.5,0.4],[180,740,0.7,0.6],
+            [310,760,0.6,0.5],[160,500,0.5,0.4],[290,400,0.6,0.5],[55,400,0.7,0.6],
           ].map((s,i) => (
             <circle key={i} cx={s[0]} cy={s[1]} r={s[2]} fill="#fff" opacity={s[3]}/>
           ))}
-          {/* Airplane emoji-style icon */}
-          <text x="345" y="105" fontSize="11" opacity="0.55">✈️</text>
+          {/* Airplane emoji-style icons */}
+          <text x="345" y="105" fontSize="13" opacity="0.65">✈️</text>
+          <text x="40" y="500" fontSize="11" opacity="0.5">✈️</text>
         </svg>
       </div>
       <div style={{ position:"relative", zIndex:1, maxWidth:860, margin:"0 auto" }}>
@@ -2956,10 +3057,10 @@ export default function App() {
         {/* ── グローバル国選択 (全タブ共通) ── */}
         <div style={{ background:"rgba(255,255,255,0.12)", margin:"0 14px 10px", borderRadius:16, padding:"10px 12px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:7 }}>
-            <div style={{ fontSize:10, color:"rgba(255,255,255,0.85)", fontWeight:700, letterSpacing:1 }}>🌍 {t.selectCountry}</div>
+            <div style={{ fontSize:11, color:"#ffffff", fontWeight:800, letterSpacing:1 }}>🌍 {t.selectCountry}</div>
             {globalCountry && (
               <div style={{ fontSize:12, color:"#fff", fontWeight:700, background:"rgba(255,255,255,0.2)", padding:"2px 10px", borderRadius:14 }}>
-                {globalCountry.flag} {globalCountry.label?.en || globalCountry.name}
+                {globalCountry.flag} {globalCountry.label?.[lang] || globalCountry.name}
               </div>
             )}
           </div>
@@ -2986,7 +3087,7 @@ export default function App() {
                 setGlobalCountry(c); setCity(null); setResult(null); setCompareItems([]); setNegotiateCountry(null);
                 setScamCity(null); setYouText(""); setYouTranslated(""); setPartnerText(""); setPartnerTranslated("");
               }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 11px", background:globalCountry?.name===c.name?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.18)", border:`1.5px solid ${globalCountry?.name===c.name?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.3)"}`, borderRadius:36, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0, color:globalCountry?.name===c.name?S.accent:"#fff", fontSize:11, fontWeight:globalCountry?.name===c.name?700:400 }}>
-                <span style={{ fontSize:14 }}>{c.flag}</span>{c.label?.en || c.name}
+                <span style={{ fontSize:14 }}>{c.flag}</span>{c.label?.[lang] || c.name}
               </button>
             ))}
           </div>
@@ -2996,10 +3097,10 @@ export default function App() {
         {tab === "check" && (
           <div>
             <div style={{ padding:"10px 18px 14px" }}>
-              <div style={{ fontSize:22, color:"#10b981", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:4, textShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>{t.checkT}</div>
-              <div style={{ fontSize:11, color:"#047857", fontWeight:600, background:"rgba(16,185,129,0.15)", display:"inline-block", padding:"3px 10px", borderRadius:18, marginTop:3 }}>{t.checkD}</div>
+              <div style={{ fontSize:22, color:"#ffb380", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:6, textShadow:"0 2px 10px rgba(0,0,0,0.5), 0 0 30px rgba(255,140,66,0.3)" }}>{t.checkT}</div>
+              <div style={{ fontSize:11, color:"#ffd9b8", fontWeight:600, background:"rgba(255,140,66,0.22)", border:"1px solid rgba(255,140,66,0.4)", display:"inline-block", padding:"3px 11px", borderRadius:18, marginTop:3 }}>{t.checkD}</div>
             </div>
-            <div style={{ margin:"0 14px", background:S.card, borderRadius:22, padding:18, boxShadow:"0 8px 40px rgba(0,0,0,0.13)" }}>
+            <div style={{ margin:"0 14px", background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:22, padding:18, boxShadow:"0 8px 40px rgba(0,0,0,0.13)" }}>
               {/* Progress bar */}
               <div style={{ display:"flex", gap:5, marginBottom:18 }}>
                 {[!!globalCountry,!!city,!!mainCat,!!subCatJa,parseFloat(amount)>0].map((done,i) => (
@@ -3014,7 +3115,7 @@ export default function App() {
                 <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:7 }}>{t.s2}</div>
                 <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:14 }}>
                   {(globalCountry.cities?.ja || []).map((jaKey, i) => {
-                    const label = (globalCountry.cities?.en || globalCountry.cities?.ja || [])[i] || jaKey;
+                    const label = (globalCountry.cities?.[lang] || globalCountry.cities?.ja || [])[i] || jaKey;
                     return <Pill key={jaKey} selected={city===jaKey} onClick={() => { setCity(jaKey); setResult(null); }} small>{label}</Pill>;
                   })}
                 </div>
@@ -3025,9 +3126,9 @@ export default function App() {
                 <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:7 }}>{t.s3}</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:7, marginBottom:14 }}>
                   {MAIN_CATS.map(c => (
-                    <button key={c.id} onClick={() => { setMainCat(c); setSubCatJa(null); setFoodGroup(null); setResult(null); setCompareItems([]); }} style={{ background:mainCat?.id===c.id?"#ddeeff":S.card, border:`2px solid ${mainCat?.id===c.id?S.accent:S.border}`, borderRadius:12, padding:12, cursor:"pointer", textAlign:"left", boxShadow:mainCat?.id===c.id?"0 2px 10px rgba(26,86,160,0.2)":"0 1px 3px rgba(0,0,0,0.06)" }}>
+                    <button key={c.id} onClick={() => { setMainCat(c); setSubCatJa(null); setFoodGroup(null); setResult(null); setCompareItems([]); }} style={{ background:mainCat?.id===c.id?"rgba(244,114,182,0.28)":S.card, border:`2px solid ${mainCat?.id===c.id?S.pink:S.border}`, borderRadius:12, padding:12, cursor:"pointer", textAlign:"left", boxShadow:mainCat?.id===c.id?"0 4px 18px rgba(244,114,182,0.35)":"0 1px 3px rgba(0,0,0,0.2)" }}>
                       <div style={{ fontSize:20, marginBottom:4 }}>{c.icon}</div>
-                      <div style={{ fontSize:12, fontWeight:700, color:"#1a1a1a" }}>{c.name[lang] || c.name.ja}</div>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#ffffff" }}>{c.name[lang] || c.name.ja}</div>
                       <div style={{ fontSize:10, color:S.muted, marginTop:2 }}>{c.hint[lang] || c.hint.ja}</div>
                     </button>
                   ))}
@@ -3039,7 +3140,7 @@ export default function App() {
                 <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:6 }}>{t.s4}</div>
                 <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:4, marginBottom:8, scrollbarWidth:"none" }}>
                   {FOOD_GROUPS.map(g => (
-                    <button key={g.label.ja} onClick={() => { setFoodGroup(g.label.ja); setSubCatJa(null); setResult(null); }} style={{ padding:"6px 12px", background:foodGroup===g.label.ja?S.accent:S.tag, border:`1.5px solid ${foodGroup===g.label.ja?S.accent:S.border}`, borderRadius:24, fontSize:11, cursor:"pointer", color:foodGroup===g.label.ja?"#fff":"#1a1a14", whiteSpace:"nowrap", flexShrink:0, fontWeight:700 }}>
+                    <button key={g.label.ja} onClick={() => { setFoodGroup(g.label.ja); setSubCatJa(null); setResult(null); }} style={{ padding:"6px 12px", background:foodGroup===g.label.ja?S.pink:S.tag, border:`1.5px solid ${foodGroup===g.label.ja?S.pink:S.border}`, borderRadius:24, fontSize:11, cursor:"pointer", color:foodGroup===g.label.ja?"#fff":"#ffffff", whiteSpace:"nowrap", flexShrink:0, fontWeight:700 }}>
                       {g.label[lang] || g.label.ja}
                     </button>
                   ))}
@@ -3065,14 +3166,14 @@ export default function App() {
               {mainCat?.id === "taxi" && (
                 <div style={{ marginBottom:14, display:"flex", flexDirection:"column", gap:10 }}>
                   <div>
-                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:S.muted, marginBottom:5 }}><span>{t.dist}</span><span style={{ color:S.accent, fontWeight:700 }}>{taxiDist} km</span></div>
-                    <input type="range" min="1" max="50" value={taxiDist} onChange={e => { setTaxiDist(parseInt(e.target.value)); setResult(null); }} style={{ width:"100%", accentColor:S.accent }} />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:S.muted, marginBottom:5 }}><span>{t.dist}</span><span style={{ color:S.pink, fontWeight:700 }}>{taxiDist} km</span></div>
+                    <input type="range" min="1" max="50" value={taxiDist} onChange={e => { setTaxiDist(parseInt(e.target.value)); setResult(null); }} style={{ width:"100%", accentColor:S.pink }} />
                   </div>
                   <div>
                     <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:6 }}>{t.time}</div>
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:5 }}>
                       {[["朝",t.am,"🌅"],["昼",t.noon,"☀️"],["夕方",t.pm,"🌆"],["深夜",t.late,"🌙"]].map(([key,label,ic]) => (
-                        <button key={key} onClick={() => { setTaxiTime(key); setResult(null); }} style={{ padding:"7px 3px", background:taxiTime===key?S.accent:S.tag, border:`1.5px solid ${taxiTime===key?S.accent:S.border}`, borderRadius:9, fontSize:10, cursor:"pointer", color:taxiTime===key?"#fff":"#1a1a14" }}>{ic} {label}</button>
+                        <button key={key} onClick={() => { setTaxiTime(key); setResult(null); }} style={{ padding:"7px 3px", background:taxiTime===key?S.pink:S.tag, border:`1.5px solid ${taxiTime===key?S.pink:S.border}`, borderRadius:9, fontSize:10, cursor:"pointer", color:taxiTime===key?"#fff":"#ffffff" }}>{ic} {label}</button>
                       ))}
                     </div>
                   </div>
@@ -3083,31 +3184,31 @@ export default function App() {
               {mainCat && subCatJa && <>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:7 }}>
                   <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase" }}>{t.s5}</div>
-                  <button onClick={() => { setCompareMode(!compareMode); setResult(null); setCompareItems([]); }} style={{ fontSize:10, padding:"4px 11px", borderRadius:20, border:`1.5px solid ${compareMode?S.accent:S.border}`, background:compareMode?S.accent:"transparent", color:compareMode?"#fff":S.muted, cursor:"pointer" }}>{compareMode?t.cmpOn:t.cmpOff}</button>
+                  <button onClick={() => { setCompareMode(!compareMode); setResult(null); setCompareItems([]); }} style={{ fontSize:10, padding:"4px 11px", borderRadius:20, border:`1.5px solid ${compareMode?S.pink:S.border}`, background:compareMode?S.pink:"transparent", color:compareMode?"#fff":S.muted, cursor:"pointer" }}>{compareMode?t.cmpOn:t.cmpOff}</button>
                 </div>
                 {!compareMode ? (
                   <>
-                    <div style={{ background:S.tag, border:`1.5px solid ${parseFloat(amount)>0?S.accent:S.border}`, borderRadius:13, padding:13, marginBottom:12 }}>
+                    <div style={{ background:S.tag, border:`1.5px solid ${parseFloat(amount)>0?S.pink:S.border}`, borderRadius:13, padding:13, marginBottom:12 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                        <div style={{ background:S.accent, color:"#fff", padding:"6px 11px", borderRadius:9, fontSize:12, fontWeight:700 }}>{globalCountry?.currency || "--"}</div>
-                        <input type="number" value={amount} onChange={e => { setAmount(e.target.value); setResult(null); }} placeholder="0" style={{ flex:1, background:"none", border:"none", outline:"none", fontSize:32, fontFamily:"Georgia,serif", color:"#1a1a14", minWidth:0 }} />
+                        <div style={{ background:S.pink, color:"#fff", padding:"6px 11px", borderRadius:9, fontSize:12, fontWeight:700 }}>{globalCountry?.currency || "--"}</div>
+                        <input type="number" value={amount} onChange={e => { setAmount(e.target.value); setResult(null); }} placeholder="0" style={{ flex:1, background:"none", border:"none", outline:"none", fontSize:32, fontFamily:"Georgia,serif", color:"#ffffff", minWidth:0 }} />
                       </div>
                       {jpy && parseFloat(amount)>0 && <div style={{ fontSize:12, color:S.muted, marginTop:7, paddingTop:7, borderTop:`1px solid ${S.border}` }}>{t.approx(jpy)}</div>}
                     </div>
-                    <button onClick={runJudge} disabled={!canJudge} style={{ width:"100%", background:canJudge?S.grad:"#ccc", color:"#fff", border:"none", borderRadius:13, padding:15, fontSize:14, fontWeight:700, cursor:canJudge?"pointer":"not-allowed", boxShadow:canJudge?"0 4px 15px rgba(26,86,160,0.4)":"none" }}>{t.judge}</button>
+                    <button onClick={runJudge} disabled={!canJudge} style={{ width:"100%", background:canJudge?"linear-gradient(135deg,#ff8c42,#ffb380)":"rgba(255,255,255,0.15)", color:"#fff", border:"1px solid rgba(255,255,255,0.25)", borderRadius:13, padding:15, fontSize:14, fontWeight:700, cursor:canJudge?"pointer":"not-allowed", boxShadow:canJudge?"0 4px 20px rgba(255,140,66,0.4)":"none" }}>{t.judge}</button>
                   </>
                 ) : (
                   <div>
                     <div style={{ background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:13, padding:13, marginBottom:8 }}>
-                      <input value={cmpName} onChange={e => setCmpName(e.target.value)} placeholder={t.itemPh} style={{ width:"100%", background:"none", border:"none", outline:"none", fontSize:12, color:"#1a1a14", marginBottom:8, fontFamily:"inherit" }} />
+                      <input value={cmpName} onChange={e => setCmpName(e.target.value)} placeholder={t.itemPh} style={{ width:"100%", background:"none", border:"none", outline:"none", fontSize:12, color:"#ffffff", marginBottom:8, fontFamily:"inherit" }} />
                       <div style={{ display:"flex", gap:7, alignItems:"center" }}>
-                        <div style={{ background:S.accent, color:"#fff", padding:"6px 10px", borderRadius:9, fontSize:11, fontWeight:700 }}>{globalCountry?.currency}</div>
-                        <input type="number" value={cmpAmt} onChange={e => setCmpAmt(e.target.value)} placeholder={t.amtPh} style={{ flex:1, background:"none", border:"none", outline:"none", fontSize:24, fontFamily:"Georgia,serif", color:"#1a1a14", minWidth:0 }} />
+                        <div style={{ background:S.pink, color:"#fff", padding:"6px 10px", borderRadius:9, fontSize:11, fontWeight:700 }}>{globalCountry?.currency}</div>
+                        <input type="number" value={cmpAmt} onChange={e => setCmpAmt(e.target.value)} placeholder={t.amtPh} style={{ flex:1, background:"none", border:"none", outline:"none", fontSize:24, fontFamily:"Georgia,serif", color:"#ffffff", minWidth:0 }} />
                         <button onClick={addToCompare} style={{ background:S.accent, color:"#fff", border:"none", borderRadius:9, padding:"8px 12px", fontSize:11, fontWeight:700, cursor:"pointer" }}>{t.add}</button>
                       </div>
                     </div>
                     {compareItems.length>0 && (
-                      <div style={{ background:S.card, border:`1px solid ${S.border}`, borderRadius:13, padding:12, marginBottom:8 }}>
+                      <div style={{ background:S.card, border:`1px solid rgba(255,255,255,0.25)`, borderRadius:13, padding:12, marginBottom:8 }}>
                         {compareItems.map((item,i) => (
                           <div key={i} style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 0", borderBottom:i<compareItems.length-1?`1px solid ${S.border}`:"none" }}>
                             <div style={{ fontSize:20 }}>{item.emoji}</div>
@@ -3127,11 +3228,11 @@ export default function App() {
                 {/* Result */}
                 {result && !compareMode && (
                   <div style={{ marginTop:14 }}>
-                    <div style={{ background:result.bg, borderRadius:13, padding:14, marginBottom:10, display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ background:"rgba(255,255,255,0.08)", backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.18)", borderRadius:13, padding:14, marginBottom:10, display:"flex", alignItems:"center", gap:12 }}>
                       <div style={{ fontSize:42 }}>{result.emoji}</div>
                       <div>
-                        <div style={{ fontSize:24, fontFamily:"Georgia,serif", fontWeight:"bold", color:result.color }}>{result.verdict}</div>
-                        <div style={{ fontSize:11, color:S.muted, marginTop:2 }}>
+                        <div style={{ fontSize:24, fontFamily:"Georgia,serif", fontWeight:"bold", color:"#ffffff", textShadow:`0 0 20px ${result.color}` }}>{result.verdict}</div>
+                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.75)", marginTop:2 }}>
                           {result.verdict===t.cheap?t.cheapD(result.pct):result.verdict===t.exp?t.expD(result.pct):t.normalD}
                         </div>
                       </div>
@@ -3139,14 +3240,12 @@ export default function App() {
                     <div style={{ height:6, background:S.tag, borderRadius:3, marginBottom:12, overflow:"hidden" }}>
                       <div style={{ height:"100%", width:`${result.barPct}%`, background:"linear-gradient(90deg,#006e52,#7a5e00,#b84800)", borderRadius:3, transition:"width 0.8s" }} />
                     </div>
-                    <div style={{ background:"#f6f4f0", borderLeft:`3px solid ${S.accent}`, borderRadius:9, padding:11, marginBottom:10 }}>
-                      <div style={{ fontSize:9, letterSpacing:2, color:S.accent, fontWeight:700, textTransform:"uppercase", marginBottom:5 }}>{t.priceD}</div>
-                      <div style={{ fontSize:11, lineHeight:1.8 }}>{(() => {
+                    <div style={{ background:"rgba(255,255,255,0.08)", backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.18)", borderLeft:`3px solid ${S.pink}`, borderRadius:9, padding:11, marginBottom:10 }}>
+                      <div style={{ fontSize:9, letterSpacing:2, color:S.pink, fontWeight:800, textTransform:"uppercase", marginBottom:5 }}>{t.priceD}</div>
+                      <div style={{ fontSize:11, lineHeight:1.8, color:"#ffffff" }}>{(() => {
                         const r = typeof result.reason === "object" ? (result.reason.en || result.reason.ja || "") : (result.reason || "");
-                        // 日本語が含まれているかチェック（ひらがな・カタカナ・漢字）
                         const hasJapanese = /[ぁ-んァ-ヶー一-龯]/.test(r);
                         if (hasJapanese) {
-                          // 英語の定型文に置き換え
                           return `Typical range: ${result.min.toLocaleString()}〜${result.max.toLocaleString()} ${result.currency} (avg ${result.avg.toLocaleString()}).`;
                         }
                         return r;
@@ -3154,23 +3253,23 @@ export default function App() {
                     </div>
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6, marginBottom:10 }}>
                       {[[t.avgL,result.avg],[t.minL,result.min],[t.maxL,result.max]].map(([l,v]) => (
-                        <div key={l} style={{ background:S.tag, borderRadius:9, padding:"9px 5px", textAlign:"center" }}>
-                          <div style={{ fontSize:9, color:S.muted, textTransform:"uppercase", letterSpacing:1, marginBottom:2 }}>{l}</div>
-                          <div style={{ fontSize:11, fontFamily:"Georgia,serif" }}>{typeof v==="number"?v.toLocaleString():v} {result.currency}</div>
+                        <div key={l} style={{ background:"rgba(255,255,255,0.08)", backdropFilter:"blur(12px)", WebkitBackdropFilter:"blur(12px)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:9, padding:"9px 5px", textAlign:"center" }}>
+                          <div style={{ fontSize:9, color:"rgba(255,255,255,0.7)", textTransform:"uppercase", letterSpacing:1, marginBottom:2, fontWeight:600 }}>{l}</div>
+                          <div style={{ fontSize:11, fontFamily:"Georgia,serif", color:"#ffffff", fontWeight:600 }}>{typeof v==="number"?v.toLocaleString():v} {result.currency}</div>
                         </div>
                       ))}
                     </div>
-                    <div style={{ display:"inline-flex", alignItems:"center", gap:3, padding:"4px 11px", borderRadius:18, fontSize:10, fontWeight:600, background:result.trend?.includes("+")?"#fdeee0":"#edeae4", color:result.trend?.includes("+")?"#b84800":S.muted }}>
+                    <div style={{ display:"inline-flex", alignItems:"center", gap:3, padding:"4px 11px", borderRadius:18, fontSize:10, fontWeight:600, background:result.trend?.includes("+")?"rgba(251,146,60,0.22)":"rgba(255,255,255,0.10)", border:"1px solid rgba(255,255,255,0.18)", color:result.trend?.includes("+")?"#fdba74":"rgba(255,255,255,0.7)" }}>
                       {result.trend?.includes("+")?t.trendUp(result.trend.replace(/\+/g,"")):t.trendSt(result.trend)}
                     </div>
 
                     {/* 交渉アシスタント */}
                     {result.isExpensive && negotiateCountry && (
                       <div style={{ marginTop:16, background:"linear-gradient(135deg,#fff7ed,#fef3c7)", border:`2px solid #f59e0b`, borderRadius:16, padding:16 }}>
-                        <div style={{ fontSize:14, fontWeight:800, color:"#92400e", marginBottom:4 }}>💬 {t.negotiateTitle}</div>
-                        <div style={{ fontSize:11, color:"#78350f", marginBottom:14, lineHeight:1.5 }}>{t.negotiateDesc} ({negotiateCountry.flag} {negotiateCountry.localLangName})</div>
+                        <div style={{ fontSize:14, fontWeight:800, color:"#ffd9b8", marginBottom:4 }}>💬 {t.negotiateTitle}</div>
+                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.85)", marginBottom:14, lineHeight:1.5 }}>{t.negotiateDesc} ({negotiateCountry.flag} {negotiateCountry.localLangName})</div>
                         <div style={{ marginBottom:12 }}>
-                          <div style={{ fontSize:10, color:"#92400e", fontWeight:700, marginBottom:6 }}>🗣️ {t.negotiateYou}</div>
+                          <div style={{ fontSize:10, color:"#ffd9b8", fontWeight:700, marginBottom:6 }}>🗣️ {t.negotiateYou}</div>
                           <textarea value={negYouText} onChange={e => setNegYouText(e.target.value)} placeholder={t.negYouPh} style={{ width:"100%", background:"rgba(255,255,255,0.7)", border:"1.5px solid #f59e0b", borderRadius:9, padding:"8px 11px", fontSize:12, fontFamily:"inherit", resize:"vertical", minHeight:54, outline:"none", boxSizing:"border-box", marginBottom:6 }} />
                           <div style={{ display:"flex", gap:6 }}>
                             <div style={{ flex:1 }}>
@@ -3181,12 +3280,12 @@ export default function App() {
                                 label={t.transHold}
                               />
                             </div>
-                            <button onClick={handleNegYouSpeak} disabled={negYouTranslating||!negYouText.trim()} style={{ flex:1, padding:"9px", background:negYouTranslating?"#fef3c7":"#f59e0b", border:"none", borderRadius:14, fontSize:11, fontWeight:700, cursor:"pointer", color:"#fff" }}>
+                            <button onClick={handleNegYouSpeak} disabled={negYouTranslating||!negYouText.trim()} style={{ flex:1, padding:"9px", background:negYouTranslating?"rgba(255,255,255,0.15)":"linear-gradient(135deg,#ff8c42,#ffb380)", border:"none", borderRadius:14, fontSize:11, fontWeight:800, cursor:"pointer", color:"#fff", boxShadow: negYouTranslating?"none":"0 4px 14px rgba(255,140,66,0.4)" }}>
                               {negYouTranslating?t.transTranslating:"🌐 "+t.transTranslate}
                             </button>
                           </div>
                           {negYouTranslated && (
-                            <div style={{ marginTop:8, padding:10, background:"#065f46", borderRadius:10 }}>
+                            <div style={{ marginTop:8, padding:10, background:"rgba(52,211,153,0.25)", borderRadius:10 }}>
                               <div style={{ fontSize:14, fontWeight:700, color:"#fff", marginBottom:6 }}>{negYouTranslated}</div>
                               <div style={{ display:"flex", gap:6 }}>
                                 <button onClick={() => speakText(negYouTranslated, negotiateCountry.localLang)} style={{ flex:1, padding:"7px", background:"rgba(255,255,255,0.15)", border:"1.5px solid rgba(255,255,255,0.3)", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer", color:"#fff" }}>🔊 {t.transSpeak}</button>
@@ -3196,7 +3295,7 @@ export default function App() {
                           )}
                         </div>
                         <div>
-                          <div style={{ fontSize:10, color:"#92400e", fontWeight:700, marginBottom:6 }}>👂 {t.negotiatePartner}</div>
+                          <div style={{ fontSize:10, color:"#ffd9b8", fontWeight:700, marginBottom:6 }}>👂 {t.negotiatePartner}</div>
                           <textarea value={negPartnerText} onChange={e => setNegPartnerText(e.target.value)} placeholder={`${negotiateCountry.flag} ${negotiateCountry.localLangName}...`} style={{ width:"100%", background:"rgba(255,255,255,0.7)", border:"1.5px solid #f59e0b", borderRadius:9, padding:"8px 11px", fontSize:12, fontFamily:"inherit", resize:"vertical", minHeight:54, outline:"none", boxSizing:"border-box", marginBottom:6 }} />
                           <div style={{ display:"flex", gap:6 }}>
                             <div style={{ flex:1 }}>
@@ -3207,12 +3306,12 @@ export default function App() {
                                 label={t.transHold}
                               />
                             </div>
-                            <button onClick={handleNegPartnerSpeak} disabled={negPartnerTranslating||!negPartnerText.trim()} style={{ flex:1, padding:"9px", background:negPartnerTranslating?"#fef3c7":"#f59e0b", border:"none", borderRadius:14, fontSize:11, fontWeight:700, cursor:"pointer", color:"#fff" }}>
+                            <button onClick={handleNegPartnerSpeak} disabled={negPartnerTranslating||!negPartnerText.trim()} style={{ flex:1, padding:"9px", background:negPartnerTranslating?"rgba(255,255,255,0.15)":"linear-gradient(135deg,#ff8c42,#ffb380)", border:"none", borderRadius:14, fontSize:11, fontWeight:800, cursor:"pointer", color:"#fff", boxShadow: negPartnerTranslating?"none":"0 4px 14px rgba(255,140,66,0.4)" }}>
                               {negPartnerTranslating?t.transTranslating:"🌐 "+t.transTranslate}
                             </button>
                           </div>
                           {negPartnerTranslated && (
-                            <div style={{ marginTop:8, padding:10, background:"#1a56a0", borderRadius:10 }}>
+                            <div style={{ marginTop:8, padding:10, background:"rgba(96,176,232,0.30)", borderRadius:10 }}>
                               <div style={{ fontSize:14, fontWeight:700, color:"#fff" }}>💬 {negPartnerTranslated}</div>
                             </div>
                           )}
@@ -3226,19 +3325,19 @@ export default function App() {
 
             {/* 投稿セクション */}
             {(result||compareItems.length>0) && (
-              <div style={{ margin:"10px 14px 0", background:S.card, border:`1.5px solid ${S.border}`, borderRadius:15, padding:14 }}>
-                <div style={{ fontSize:12, fontWeight:700, marginBottom:2 }}>{t.postT}</div>
-                <div style={{ fontSize:10, color:S.muted, marginBottom:10, lineHeight:1.5 }}>{t.postD}</div>
-                <input value={postItem} onChange={e => setPostItem(e.target.value)} placeholder={t.postPh} style={{ width:"100%", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit", marginBottom:6, boxSizing:"border-box" }} />
+              <div style={{ margin:"10px 14px 0", background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.18)", borderRadius:15, padding:14, boxShadow:"0 4px 16px rgba(0,0,0,0.2)" }}>
+                <div style={{ fontSize:12, fontWeight:800, color:"#ffffff", marginBottom:2 }}>{t.postT}</div>
+                <div style={{ fontSize:10, color:"rgba(255,255,255,0.6)", marginBottom:10, lineHeight:1.5 }}>{t.postD}</div>
+                <input value={postItem} onChange={e => setPostItem(e.target.value)} placeholder={t.postPh} style={{ width:"100%", background:S.tag, border:`1.5px solid ${postItem?S.pink:S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit", marginBottom:6, boxSizing:"border-box" }} />
                 <div style={{ display:"flex", gap:6, marginBottom:6 }}>
-                  <input value={postPrice} onChange={e => setPostPrice(e.target.value)} type="number" placeholder={t.amtPh} style={{ flex:1, background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit" }} />
+                  <input value={postPrice} onChange={e => setPostPrice(e.target.value)} type="number" placeholder={t.amtPh} style={{ flex:1, background:S.tag, border:`1.5px solid ${postPrice?S.pink:S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit" }} />
                 </div>
-                <textarea value={postText} onChange={e => setPostText(e.target.value)} placeholder={t.postComment} style={{ width:"100%", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, fontFamily:"inherit", resize:"vertical", minHeight:60, outline:"none", boxSizing:"border-box", marginBottom:6 }} />
+                <textarea value={postText} onChange={e => setPostText(e.target.value)} placeholder={t.postComment} style={{ width:"100%", background:S.tag, border:`1.5px solid ${postText?S.pink:S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, fontFamily:"inherit", resize:"vertical", minHeight:60, outline:"none", boxSizing:"border-box", marginBottom:6 }} />
                 <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                  <button onClick={() => photoInputRef.current?.click()} style={{ padding:"8px 12px", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, fontSize:11, cursor:"pointer", color:S.muted }}>📷</button>
+                  <button onClick={() => photoInputRef.current?.click()} style={{ padding:"8px 12px", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, fontSize:11, cursor:"pointer", color:"#fff" }}>📷</button>
                   <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} style={{ display:"none" }} />
-                  {postPhotoPreview && <img src={postPhotoPreview} style={{ width:40, height:40, objectFit:"cover", borderRadius:6, border:`1px solid ${S.border}` }} />}
-                  <button onClick={submitPost} style={{ flex:1, background:S.accent, color:"#fff", border:"none", borderRadius:9, padding:"8px 13px", fontSize:11, fontWeight:700, cursor:"pointer" }}>{t.postSv}</button>
+                  {postPhotoPreview && <img src={postPhotoPreview} style={{ width:40, height:40, objectFit:"cover", borderRadius:6, border:`1px solid rgba(255,255,255,0.25)` }} />}
+                  <button onClick={submitPost} style={{ flex:1, background:"linear-gradient(135deg,#ec4899,#f472b6)", color:"#fff", border:"none", borderRadius:9, padding:"8px 13px", fontSize:11, fontWeight:800, cursor:"pointer", boxShadow:"0 3px 12px rgba(244,114,182,0.4)" }}>{t.postSv}</button>
                 </div>
               </div>
             )}
@@ -3247,10 +3346,10 @@ export default function App() {
 
         {/* ══════════ SCAM TAB ══════════ */}
         {tab === "scam" && (
-          <div style={{ background:S.bg, minHeight:"100vh" }}>
+          <div>
             <div style={{ padding:"10px 18px 14px" }}>
-              <div style={{ fontSize:22, color:"#10b981", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:4, textShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>{t.scamT}</div>
-              <div style={{ fontSize:11, color:"#047857", fontWeight:600, background:"rgba(16,185,129,0.15)", display:"inline-block", padding:"3px 10px", borderRadius:18, marginTop:3 }}>{t.scamD}</div>
+              <div style={{ fontSize:22, color:"#ffb380", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:6, textShadow:"0 2px 10px rgba(0,0,0,0.5), 0 0 30px rgba(255,140,66,0.3)" }}>{t.scamT}</div>
+              <div style={{ fontSize:11, color:"#ffd9b8", fontWeight:600, background:"rgba(255,140,66,0.22)", border:"1px solid rgba(255,140,66,0.4)", display:"inline-block", padding:"3px 11px", borderRadius:18, marginTop:3 }}>{t.scamD}</div>
             </div>
             {/* City select */}
             {globalCountry && (() => {
@@ -3258,16 +3357,16 @@ export default function App() {
               const citiesWithData = (globalCountry?.cities?.ja||[]).filter(jaKey => sd?.[jaKey]);
               if (citiesWithData.length===0) return null;
               return (
-                <div style={{ background:"#f8f6f2", padding:"10px 0 10px 14px", borderTop:`1px solid ${S.border}` }}>
+                <div style={{ background:"rgba(255,255,255,0.05)", padding:"10px 0 10px 14px", borderTop:`1px solid ${S.border}` }}>
                   <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:7, paddingRight:14 }}>🏙️ CITY</div>
                   <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:3, paddingRight:14, scrollbarWidth:"none" }}>
-                    <button onClick={() => setScamCity(null)} style={{ padding:"6px 12px", background:!scamCity?S.accent:S.tag, border:`1.5px solid ${!scamCity?S.accent:S.border}`, borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", color:!scamCity?"#fff":"#1a1a14", whiteSpace:"nowrap", flexShrink:0 }}>
+                    <button onClick={() => setScamCity(null)} style={{ padding:"6px 12px", background:!scamCity?S.pink:S.tag, border:`1.5px solid ${!scamCity?S.pink:S.border}`, borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", color:!scamCity?"#fff":"#ffffff", whiteSpace:"nowrap", flexShrink:0 }}>
                       {t.cityAll}
                     </button>
                     {citiesWithData.map(jaKey => {
                       const idx = (globalCountry?.cities?.ja||[]).indexOf(jaKey);
-                      const label = (globalCountry?.cities?.en||globalCountry?.cities?.ja||[])[idx]||jaKey;
-                      return <button key={jaKey} onClick={() => setScamCity(jaKey)} style={{ padding:"6px 12px", background:scamCity===jaKey?S.accent:S.tag, border:`1.5px solid ${scamCity===jaKey?S.accent:S.border}`, borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", color:scamCity===jaKey?"#fff":"#1a1a14", whiteSpace:"nowrap", flexShrink:0 }}>{label}</button>;
+                      const label = (globalCountry?.cities?.[lang]||globalCountry?.cities?.ja||[])[idx]||jaKey;
+                      return <button key={jaKey} onClick={() => setScamCity(jaKey)} style={{ padding:"6px 12px", background:scamCity===jaKey?S.pink:S.tag, border:`1.5px solid ${scamCity===jaKey?S.pink:S.border}`, borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", color:scamCity===jaKey?"#fff":"#ffffff", whiteSpace:"nowrap", flexShrink:0 }}>{label}</button>;
                     })}
                   </div>
                 </div>
@@ -3276,7 +3375,7 @@ export default function App() {
             {/* Scam cards */}
             <div style={{ margin:"10px 14px 0" }}>
               {!globalCountry ? (
-                <div style={{ background:S.card, borderRadius:18, padding:30, textAlign:"center", color:S.muted, boxShadow:"0 2px 12px rgba(0,0,0,0.07)" }}>
+                <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:18, padding:30, textAlign:"center", color:S.muted, boxShadow:"0 2px 12px rgba(0,0,0,0.07)" }}>
                   <div style={{ fontSize:32, marginBottom:10 }}>🛡️</div>
                   <div style={{ fontSize:13 }}>{t.scamSel}</div>
                 </div>
@@ -3285,38 +3384,41 @@ export default function App() {
                 const showCity = scamCity && cityScams.length > 0;
                 const items = showCity ? cityScams : national;
                 if (items.length === 0) return (
-                  <div style={{ background:S.card, borderRadius:18, padding:30, textAlign:"center", color:S.muted }}>
+                  <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:18, padding:30, textAlign:"center", color:S.muted }}>
                     <div style={{ fontSize:13 }}>{t.noPrice}</div>
                   </div>
                 );
                 return (
                   <>
                     {showCity ? (
-                      <div style={{ background:"#fef3c7", borderRadius:11, padding:"8px 12px", marginBottom:10, fontSize:11, color:"#92400e", fontWeight:600 }}>
-                        🏙️ {getCityEN(globalCountry, scamCity)}{t.scamCitySpecific}
+                      <div style={{ background:"rgba(244,114,182,0.18)", border:"1px solid rgba(244,114,182,0.4)", borderRadius:11, padding:"9px 13px", marginBottom:10, fontSize:12, color:"#fbcfe8", fontWeight:700 }}>
+                        🏙️ {(() => {
+                          const idx = (globalCountry?.cities?.ja||[]).indexOf(scamCity);
+                          return (globalCountry?.cities?.[lang]||globalCountry?.cities?.ja||[])[idx] || scamCity;
+                        })()}{t.scamCitySpecific}
                       </div>
                     ) : (
-                      <div style={{ background:"#dbeafe", borderRadius:11, padding:"8px 12px", marginBottom:10, fontSize:11, color:"#1e40af", fontWeight:600 }}>
-                        🌍 {globalCountry.label?.en || globalCountry.name} · {t.scamCityHdr2}
+                      <div style={{ background:"rgba(96,176,232,0.18)", border:"1px solid rgba(96,176,232,0.4)", borderRadius:11, padding:"9px 13px", marginBottom:10, fontSize:12, color:"#a8d9f5", fontWeight:700 }}>
+                        🌍 {globalCountry.label?.[lang] || globalCountry.name} · {t.scamCityHdr2}
                       </div>
                     )}
                     {items.map((s,i) => (
-                      <div key={i} style={{ background:S.card, borderRadius:14, padding:14, marginBottom:9, boxShadow:"0 2px 10px rgba(0,0,0,0.07)", borderLeft:`4px solid ${s.level==="high"?"#c05000":s.level==="med"?"#8a6800":"#595550"}` }}>
+                      <div key={i} style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.18)", borderRadius:14, padding:14, marginBottom:9, boxShadow:"0 4px 16px rgba(0,0,0,0.2)", borderLeft:`4px solid ${s.level==="high"?"#ef4444":s.level==="med"?"#fbbf24":"#34d399"}` }}>
                         <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
                           <div style={{ fontSize:24, flexShrink:0 }}>{s.icon}</div>
                           <div style={{ flex:1 }}>
                             <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:5, flexWrap:"wrap" }}>
-                              <div style={{ fontSize:13, fontWeight:700 }}>{s.title[lang]||s.title.ja||s.title.en}</div>
-                              <div style={{ fontSize:10, padding:"2px 8px", borderRadius:18, fontWeight:700, background:s.level==="high"?"#fdeee0":s.level==="med"?"#fdf6d8":"#edeae4", color:s.level==="high"?"#c05000":s.level==="med"?"#8a6800":"#595550" }}>
-                                {s.level==="high"?t.lH:s.level==="med"?t.lM:t.lL}
+                              <div style={{ fontSize:13, fontWeight:800, color:"#ffffff" }}>{s.title[lang]||s.title.ja||s.title.en}</div>
+                              <div style={{ fontSize:10, padding:"3px 10px", borderRadius:18, fontWeight:800, background:s.level==="high"?"rgba(239,68,68,0.18)":s.level==="med"?"rgba(251,191,36,0.18)":"rgba(52,211,153,0.18)", border:`1px solid ${s.level==="high"?"rgba(239,68,68,0.5)":s.level==="med"?"rgba(251,191,36,0.5)":"rgba(52,211,153,0.5)"}`, color:s.level==="high"?"#fca5a5":s.level==="med"?"#fde68a":"#6ee7b7" }}>
+                                {s.level==="high"?"🔴 "+t.lH:s.level==="med"?"🟡 "+t.lM:"🟢 "+t.lL}
                               </div>
                             </div>
-                            <div style={{ fontSize:12, color:"#333", lineHeight:1.75 }}>{s.desc[lang]||s.desc.ja||s.desc.en}</div>
+                            <div style={{ fontSize:12, color:"rgba(255,255,255,0.88)", lineHeight:1.75 }}>{s.desc[lang]||s.desc.ja||s.desc.en}</div>
                           </div>
                         </div>
                       </div>
                     ))}
-                    <div style={{ background:"#deeeff", borderRadius:11, padding:11, marginBottom:14, fontSize:11, color:"#003f7a", lineHeight:1.75, fontWeight:600 }}>{t.scamNote}</div>
+                    <div style={{ background:"rgba(96,176,232,0.15)", border:"1px solid rgba(96,176,232,0.35)", borderRadius:11, padding:11, marginBottom:14, fontSize:11, color:"#a8d9f5", lineHeight:1.75, fontWeight:600 }}>{t.scamNote}</div>
                   </>
                 );
               })()}
@@ -3326,29 +3428,29 @@ export default function App() {
 
         {/* ══════════ TRANSLATE TAB ══════════ */}
         {tab === "trans" && (
-          <div style={{ background:S.bg, minHeight:"100vh" }}>
+          <div>
             <div style={{ padding:"10px 18px 14px" }}>
-              <div style={{ fontSize:22, color:"#10b981", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:4, textShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>{t.transT}</div>
-              <div style={{ fontSize:11, color:"#047857", fontWeight:600, background:"rgba(16,185,129,0.15)", display:"inline-block", padding:"3px 10px", borderRadius:18, marginTop:3 }}>{t.transD}</div>
+              <div style={{ fontSize:22, color:"#ffb380", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:6, textShadow:"0 2px 10px rgba(0,0,0,0.5), 0 0 30px rgba(255,140,66,0.3)" }}>{t.transT}</div>
+              <div style={{ fontSize:11, color:"#ffd9b8", fontWeight:600, background:"rgba(255,140,66,0.22)", border:"1px solid rgba(255,140,66,0.4)", display:"inline-block", padding:"3px 11px", borderRadius:18, marginTop:3 }}>{t.transD}</div>
             </div>
             <div style={{ margin:"10px 14px 0" }}>
               {!globalCountry ? (
-                <div style={{ background:S.card, borderRadius:18, padding:30, textAlign:"center", color:S.muted }}>
+                <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:18, padding:30, textAlign:"center", color:S.muted }}>
                   <div style={{ fontSize:32, marginBottom:10 }}>🌐</div>
                   <div style={{ fontSize:13 }}>{t.transSelCountry}</div>
                 </div>
               ) : (
                 <>
                   {/* 言語インジケーター */}
-                  <div style={{ background:S.card, borderRadius:11, padding:"9px 13px", marginBottom:10, display:"flex", alignItems:"center", gap:8, border:`1px solid ${S.border}` }}>
+                  <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:11, padding:"9px 13px", marginBottom:10, display:"flex", alignItems:"center", gap:8, border:"1px solid rgba(255,255,255,0.18)" }}>
                     <span style={{ fontSize:18 }}>{globalCountry.flag}</span>
-                    <span style={{ fontSize:11, color:S.accent, fontWeight:700 }}>{globalCountry.localLangName}</span>
-                    <span style={{ marginLeft:"auto", fontSize:10, color:S.muted }}>Anthropic AI翻訳</span>
+                    <span style={{ fontSize:12, color:"#ffb380", fontWeight:700 }}>{globalCountry.localLangName}</span>
+                    <span style={{ marginLeft:"auto", fontSize:10, color:"rgba(255,255,255,0.6)" }}>🌐 AI Translate</span>
                   </div>
 
                   {/* あなた → 現地語 */}
-                  <div style={{ background:S.card, borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:S.accent, marginBottom:10, letterSpacing:0.5 }}>🗣️ {t.transYou}</div>
+                  <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
+                    <div style={{ fontSize:12, fontWeight:800, color:"#ffb380", marginBottom:10, letterSpacing:0.5 }}>🗣️ {t.transYou}</div>
                     <textarea
                       value={youText}
                       onChange={e => setYouText(e.target.value)}
@@ -3364,12 +3466,12 @@ export default function App() {
                           label={t.transHold}
                         />
                       </div>
-                      <button onClick={handleYouSpeak} disabled={youTranslating||!youText.trim()} style={{ flex:1, padding:"11px", background:youTranslating?"#fef3c7":S.accentLight, border:"none", borderRadius:14, fontSize:12, fontWeight:700, cursor:"pointer", color:"#fff" }}>
+                      <button onClick={handleYouSpeak} disabled={youTranslating||!youText.trim()} style={{ flex:1, padding:"11px", background:youTranslating?"rgba(255,255,255,0.15)":"linear-gradient(135deg,#ff8c42,#ffb380)", border:"none", borderRadius:14, fontSize:12, fontWeight:800, cursor:"pointer", color:"#fff", boxShadow: youTranslating?"none":"0 4px 16px rgba(255,140,66,0.4)" }}>
                         {youTranslating ? t.transTranslating : "🌐 "+t.transTranslate}
                       </button>
                     </div>
                     {youTranslated && (
-                      <div style={{ padding:14, background:"#065f46", borderRadius:12 }}>
+                      <div style={{ padding:14, background:"rgba(52,211,153,0.25)", borderRadius:12 }}>
                         <div style={{ fontSize:16, fontWeight:700, color:"#fff", marginBottom:8, lineHeight:1.5 }}>{globalCountry.flag} {youTranslated}</div>
                         <div style={{ display:"flex", gap:7 }}>
                           <button onClick={() => speakText(youTranslated, globalCountry.localLang)} style={{ flex:1, padding:"8px", background:"rgba(255,255,255,0.15)", border:"1.5px solid rgba(255,255,255,0.3)", borderRadius:9, fontSize:11, fontWeight:700, cursor:"pointer", color:"#fff" }}>🔊 {t.transSpeak}</button>
@@ -3380,8 +3482,8 @@ export default function App() {
                   </div>
 
                   {/* 相手 → あなたの言語 */}
-                  <div style={{ background:S.card, borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:"#b84800", marginBottom:10, letterSpacing:0.5 }}>👂 {t.transPartner}</div>
+                  <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
+                    <div style={{ fontSize:12, fontWeight:800, color:"#ffb380", marginBottom:10, letterSpacing:0.5 }}>👂 {t.transPartner}</div>
                     <textarea
                       value={partnerText}
                       onChange={e => setPartnerText(e.target.value)}
@@ -3397,20 +3499,20 @@ export default function App() {
                           label={t.transHold}
                         />
                       </div>
-                      <button onClick={handlePartnerSpeak} disabled={partnerTranslating||!partnerText.trim()} style={{ flex:1, padding:"11px", background:partnerTranslating?"#fef3c7":"#b84800", border:"none", borderRadius:14, fontSize:12, fontWeight:700, cursor:"pointer", color:"#fff" }}>
+                      <button onClick={handlePartnerSpeak} disabled={partnerTranslating||!partnerText.trim()} style={{ flex:1, padding:"11px", background:partnerTranslating?"rgba(255,255,255,0.15)":"linear-gradient(135deg,#ff8c42,#ffb380)", border:"none", borderRadius:14, fontSize:12, fontWeight:800, cursor:"pointer", color:"#fff", boxShadow: partnerTranslating?"none":"0 4px 16px rgba(255,140,66,0.4)" }}>
                         {partnerTranslating ? t.transTranslating : "🌐 "+t.transTranslate}
                       </button>
                     </div>
                     {partnerTranslated && (
-                      <div style={{ padding:14, background:"#1a56a0", borderRadius:12 }}>
+                      <div style={{ padding:14, background:"rgba(96,176,232,0.30)", borderRadius:12 }}>
                         <div style={{ fontSize:16, fontWeight:700, color:"#fff", lineHeight:1.5 }}>💬 {partnerTranslated}</div>
                       </div>
                     )}
                   </div>
 
                   {/* 固定緊急フレーズ - メイン:選択言語、サブ:旅行先言語、音声:旅行先言語 */}
-                  <div style={{ background:S.card, borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:"#c05000", marginBottom:6 }}>{t.transFixed}</div>
+                  <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
+                    <div style={{ fontSize:12, fontWeight:800, color:"#ffb380", marginBottom:6 }}>{t.transFixed}</div>
                     <div style={{ fontSize:10, color:S.muted, marginBottom:10, lineHeight:1.5 }}>{t.speakHintHdr}</div>
                     {FIXED_PHRASES.map((p,i) => {
                       const localLangCode = globalCountry.localLang || "en";
@@ -3422,10 +3524,10 @@ export default function App() {
                         <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderBottom:i<FIXED_PHRASES.length-1?`1px solid ${S.border}`:"none" }}>
                           <div style={{ fontSize:20, flexShrink:0 }}>{p.emoji}</div>
                           <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontSize:12, fontWeight:700, color:"#1a1a14" }}>{userText}</div>
-                            <div style={{ fontSize:11, color:S.accent, marginTop:2, fontWeight:600 }}>{globalCountry.flag} {localText}</div>
+                            <div style={{ fontSize:12, fontWeight:700, color:"#ffffff" }}>{userText}</div>
+                            <div style={{ fontSize:11, color:S.pink, marginTop:2, fontWeight:600 }}>{globalCountry.flag} {localText}</div>
                           </div>
-                          <button onClick={() => speakText(localText, localLangCode)} style={{ padding:"8px 12px", background:S.accentLight, border:"none", borderRadius:9, fontSize:13, cursor:"pointer", flexShrink:0, color:"#fff" }}>🔊</button>
+                          <button onClick={() => speakText(localText, localLangCode)} style={{ padding:"8px 12px", background:S.pink, border:"none", borderRadius:9, fontSize:13, cursor:"pointer", flexShrink:0, color:"#fff", boxShadow:"0 2px 10px rgba(244,114,182,0.4)" }}>🔊</button>
                         </div>
                       );
                     })}
@@ -3440,13 +3542,13 @@ export default function App() {
         {tab === "travel" && (
           <div>
             <div style={{ padding:"10px 18px 14px" }}>
-              <div style={{ fontSize:22, color:"#10b981", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:4, textShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>{t.travT}</div>
-              <div style={{ fontSize:11, color:"#047857", fontWeight:600, background:"rgba(16,185,129,0.15)", display:"inline-block", padding:"3px 10px", borderRadius:18, marginTop:3 }}>{t.travD}</div>
+              <div style={{ fontSize:22, color:"#ffb380", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:6, textShadow:"0 2px 10px rgba(0,0,0,0.5), 0 0 30px rgba(255,140,66,0.3)" }}>{t.travT}</div>
+              <div style={{ fontSize:11, color:"#ffd9b8", fontWeight:600, background:"rgba(255,140,66,0.22)", border:"1px solid rgba(255,140,66,0.4)", display:"inline-block", padding:"3px 11px", borderRadius:18, marginTop:3 }}>{t.travD}</div>
             </div>
-            <div style={{ background:S.card, padding:"12px 0 12px 14px", boxShadow:"0 2px 8px rgba(0,0,0,0.08)" }}>
+            <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", padding:"12px 0 12px 14px", boxShadow:"0 2px 8px rgba(0,0,0,0.08)" }}>
               <div style={{ display:"flex", gap:7, overflowX:"auto", paddingBottom:3, paddingRight:14, scrollbarWidth:"none" }}>
                 {LINK_CATS.map(cat => (
-                  <button key={cat} onClick={() => setLinkCat(cat)} style={{ padding:"7px 15px", background:linkCat===cat?S.accent:S.tag, border:`2px solid ${linkCat===cat?S.accent:S.border}`, borderRadius:22, fontSize:12, fontWeight:linkCat===cat?700:500, cursor:"pointer", color:linkCat===cat?"#fff":"#1a1a1a", whiteSpace:"nowrap", flexShrink:0 }}>{cat}</button>
+                  <button key={cat} onClick={() => setLinkCat(cat)} style={{ padding:"7px 15px", background:linkCat===cat?S.pink:S.tag, border:`2px solid ${linkCat===cat?S.pink:S.border}`, borderRadius:22, fontSize:12, fontWeight:linkCat===cat?700:500, cursor:"pointer", color:linkCat===cat?"#fff":"#1a1a1a", whiteSpace:"nowrap", flexShrink:0 }}>{cat}</button>
                 ))}
               </div>
             </div>
@@ -3454,18 +3556,18 @@ export default function App() {
               {TRAVEL_LINKS.filter(l => l.cat===linkCat).map((l,i) => {
                 const linkUrl = (typeof l.urls === "object" ? (l.urls[lang] || l.urls.en || l.urls.ja) : l.url);
                 return (
-                <a key={i} href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ display:"block", textDecoration:"none", background:S.card, borderRadius:14, padding:14, marginBottom:9, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
+                <a key={i} href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ display:"block", textDecoration:"none", background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:14, padding:14, marginBottom:9, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
                   <div style={{ display:"flex", alignItems:"center", gap:11 }}>
                     <div style={{ width:38, height:38, borderRadius:9, background:l.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, color:"#fff", flexShrink:0 }}>{l.cat}</div>
                     <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13, fontWeight:700, color:"#1a1a14", marginBottom:2 }}>{typeof l.label==="object"?(l.label[lang]||l.label.ja||l.label.en):l.label}</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:"#ffffff", marginBottom:2 }}>{typeof l.label==="object"?(l.label[lang]||l.label.ja||l.label.en):l.label}</div>
                       <div style={{ fontSize:10, color:S.muted }}>{typeof l.desc==="object"?(l.desc[lang]||l.desc.ja||l.desc.en):l.desc}</div>
                     </div>
                     <div style={{ fontSize:15, color:S.border }}>›</div>
                   </div>
                 </a>
               );})}
-              <div style={{ background:"rgba(26,86,160,0.07)", borderRadius:11, padding:11, marginBottom:14, fontSize:10, color:S.accent, lineHeight:1.7, fontWeight:600 }}>🔒 {t.travNote}</div>
+              <div style={{ background:"rgba(255,255,255,0.08)", backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:11, padding:11, marginBottom:14, fontSize:11, color:"#ffffff", lineHeight:1.7, fontWeight:600 }}>🔒 {t.travNote}</div>
             </div>
           </div>
         )}
@@ -3474,23 +3576,23 @@ export default function App() {
         {tab === "trend" && (
           <div>
             <div style={{ padding:"10px 18px 14px" }}>
-              <div style={{ fontSize:22, color:"#10b981", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:4, textShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>{t.trendT}</div>
-              <div style={{ fontSize:11, color:"#047857", fontWeight:600, background:"rgba(16,185,129,0.15)", display:"inline-block", padding:"3px 10px", borderRadius:18, marginTop:3 }}>{t.trendD}</div>
+              <div style={{ fontSize:22, color:"#ffb380", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:6, textShadow:"0 2px 10px rgba(0,0,0,0.5), 0 0 30px rgba(255,140,66,0.3)" }}>{t.trendT}</div>
+              <div style={{ fontSize:11, color:"#ffd9b8", fontWeight:600, background:"rgba(255,140,66,0.22)", border:"1px solid rgba(255,140,66,0.4)", display:"inline-block", padding:"3px 11px", borderRadius:18, marginTop:3 }}>{t.trendD}</div>
             </div>
             <div style={{ margin:"0 14px" }}>
               {TREND_DATA.map((td,i) => (
-                <div key={i} style={{ background:S.card, borderRadius:16, padding:16, marginBottom:9, boxShadow:"0 2px 8px rgba(0,0,0,0.06)" }}>
+                <div key={i} style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.18)", borderRadius:16, padding:16, marginBottom:9, boxShadow:"0 4px 16px rgba(0,0,0,0.2)" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
                     <div>
-                      <div style={{ fontFamily:"Georgia,serif", fontSize:14, fontWeight:"bold" }}>{typeof td.city==="object"?(td.city.en||td.city.ja):td.city}</div>
-                      <div style={{ fontSize:10, color:S.muted, marginTop:2 }}>{typeof td.item==="object"?(td.item[lang]||td.item.ja||td.item.en):td.item}</div>
+                      <div style={{ fontFamily:"Georgia,serif", fontSize:15, fontWeight:"bold", color:"#ffffff" }}>{typeof td.city==="object"?(td.city[lang]||td.city.ja||td.city.en):td.city}</div>
+                      <div style={{ fontSize:11, color:"rgba(255,255,255,0.7)", marginTop:2 }}>{typeof td.item==="object"?(td.item[lang]||td.item.ja||td.item.en):td.item}</div>
                     </div>
-                    <div style={{ padding:"3px 9px", borderRadius:18, fontSize:10, fontWeight:700, background:"#fdeee0", color:"#b84800" }}>↑ {td.pct}</div>
+                    <div style={{ padding:"3px 10px", borderRadius:18, fontSize:11, fontWeight:800, background:"rgba(251,146,60,0.25)", border:"1px solid rgba(251,146,60,0.4)", color:"#fdba74" }}>↑ {td.pct}</div>
                   </div>
-                  <div style={{ height:4, background:S.tag, borderRadius:2, marginBottom:6, overflow:"hidden" }}>
-                    <div style={{ height:"100%", width:`${td.barW}%`, background:"linear-gradient(90deg,#006e52,#7a5e00,#b84800)", borderRadius:2 }} />
+                  <div style={{ height:5, background:"rgba(255,255,255,0.12)", borderRadius:3, marginBottom:7, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${td.barW}%`, background:"linear-gradient(90deg,#34d399,#fbbf24,#fb923c)", borderRadius:3 }} />
                   </div>
-                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:S.muted }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"rgba(255,255,255,0.85)", fontWeight:600 }}>
                     <span>{t.prev}: {td.old}</span><span>{t.now}: {td.now}</span>
                   </div>
                 </div>
@@ -3503,49 +3605,49 @@ export default function App() {
         {tab === "db" && (
           <div>
             <div style={{ padding:"10px 18px 14px" }}>
-              <div style={{ fontSize:22, color:"#10b981", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:4, textShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>{t.dbT}</div>
-              <div style={{ fontSize:11, color:"#047857", fontWeight:600, background:"rgba(16,185,129,0.15)", display:"inline-block", padding:"3px 10px", borderRadius:18, marginTop:3 }}>{t.dbD}</div>
+              <div style={{ fontSize:22, color:"#ffb380", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:6, textShadow:"0 2px 10px rgba(0,0,0,0.5), 0 0 30px rgba(255,140,66,0.3)" }}>{t.dbT}</div>
+              <div style={{ fontSize:11, color:"#ffd9b8", fontWeight:600, background:"rgba(255,140,66,0.22)", border:"1px solid rgba(255,140,66,0.4)", display:"inline-block", padding:"3px 11px", borderRadius:18, marginTop:3 }}>{t.dbD}</div>
             </div>
 
             {/* 投稿フォーム（Twitter風） */}
-            <div style={{ margin:"0 14px 10px", background:S.card, borderRadius:16, padding:16, boxShadow:"0 2px 12px rgba(0,0,0,0.08)" }}>
-              <div style={{ fontSize:12, fontWeight:700, color:S.accent, marginBottom:10 }}>✏️ {t.postPostBtn}</div>
-              <input value={postItem} onChange={e => setPostItem(e.target.value)} placeholder={t.postPh} style={{ width:"100%", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit", marginBottom:6, boxSizing:"border-box" }} />
+            <div style={{ margin:"0 14px 10px", background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.18)", borderRadius:16, padding:16, boxShadow:"0 4px 16px rgba(0,0,0,0.2)" }}>
+              <div style={{ fontSize:12, fontWeight:800, color:"#ffb380", marginBottom:10 }}>✏️ {t.postPostBtn}</div>
+              <input value={postItem} onChange={e => setPostItem(e.target.value)} placeholder={t.postPh} style={{ width:"100%", background:S.tag, border:`1.5px solid ${postItem?S.pink:S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit", marginBottom:6, boxSizing:"border-box" }} />
               <div style={{ display:"flex", gap:6, marginBottom:6 }}>
-                <div style={{ background:S.accent, color:"#fff", padding:"7px 11px", borderRadius:9, fontSize:11, fontWeight:700, flexShrink:0 }}>{globalCountry?.currency || "---"}</div>
-                <input value={postPrice} onChange={e => setPostPrice(e.target.value)} type="number" placeholder={t.amtPh} style={{ flex:1, background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit" }} />
+                <div style={{ background:S.pink, color:"#fff", padding:"7px 11px", borderRadius:9, fontSize:11, fontWeight:700, flexShrink:0, boxShadow:"0 2px 8px rgba(244,114,182,0.35)" }}>{globalCountry?.currency || "---"}</div>
+                <input value={postPrice} onChange={e => setPostPrice(e.target.value)} type="number" placeholder={t.amtPh} style={{ flex:1, background:S.tag, border:`1.5px solid ${postPrice?S.pink:S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit" }} />
               </div>
-              <textarea value={postText} onChange={e => setPostText(e.target.value)} placeholder={t.postComment} style={{ width:"100%", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, fontFamily:"inherit", resize:"vertical", minHeight:70, outline:"none", boxSizing:"border-box", marginBottom:8 }} />
+              <textarea value={postText} onChange={e => setPostText(e.target.value)} placeholder={t.postComment} style={{ width:"100%", background:S.tag, border:`1.5px solid ${postText?S.pink:S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, fontFamily:"inherit", resize:"vertical", minHeight:70, outline:"none", boxSizing:"border-box", marginBottom:8 }} />
               {postPhotoPreview && (
                 <div style={{ marginBottom:8, position:"relative", display:"inline-block" }}>
-                  <img src={postPhotoPreview} style={{ maxWidth:"100%", maxHeight:200, borderRadius:10, border:`1px solid ${S.border}` }} />
+                  <img src={postPhotoPreview} style={{ maxWidth:"100%", maxHeight:200, borderRadius:10, border:`1px solid rgba(255,255,255,0.25)` }} />
                   <button onClick={() => { setPostPhoto(null); setPostPhotoPreview(null); }} style={{ position:"absolute", top:4, right:4, width:22, height:22, borderRadius:"50%", background:"rgba(0,0,0,0.6)", border:"none", color:"#fff", cursor:"pointer", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
                 </div>
               )}
               <div style={{ display:"flex", gap:7, alignItems:"center" }}>
-                <button onClick={() => photoInputRef.current?.click()} style={{ padding:"9px 14px", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:10, fontSize:12, cursor:"pointer", color:S.muted, display:"flex", alignItems:"center", gap:5 }}>📷 {t.postPhoto}</button>
+                <button onClick={() => photoInputRef.current?.click()} style={{ padding:"9px 14px", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:10, fontSize:12, cursor:"pointer", color:"#fff", display:"flex", alignItems:"center", gap:5 }}>📷 {t.postPhoto}</button>
                 <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} style={{ display:"none" }} />
-                <button onClick={submitPost} style={{ flex:1, background:S.accent, color:"#fff", border:"none", borderRadius:10, padding:"9px 13px", fontSize:12, fontWeight:700, cursor:"pointer" }}>{t.postSv}</button>
+                <button onClick={submitPost} style={{ flex:1, background:"linear-gradient(135deg,#ec4899,#f472b6)", color:"#fff", border:"none", borderRadius:10, padding:"9px 13px", fontSize:12, fontWeight:800, cursor:"pointer", boxShadow:"0 4px 14px rgba(244,114,182,0.4)" }}>{t.postSv}</button>
               </div>
             </div>
 
             {/* 投稿一覧 */}
             <div style={{ margin:"0 14px" }}>
               {posts.length===0 ? (
-                <div style={{ background:S.card, borderRadius:18, padding:34, textAlign:"center", color:S.muted }}>
+                <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:18, padding:34, textAlign:"center", color:"rgba(255,255,255,0.7)" }}>
                   <div style={{ fontSize:34, marginBottom:10 }}>🏪</div>
                   <div style={{ fontSize:13 }}>{t.dbE}</div>
                 </div>
               ) : posts.map((p,i) => (
-                <div key={i} style={{ background:S.card, borderRadius:14, padding:14, marginBottom:10, boxShadow:"0 2px 6px rgba(0,0,0,0.05)" }}>
+                <div key={i} style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:14, padding:14, marginBottom:10, boxShadow:"0 2px 10px rgba(0,0,0,0.2)" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:p.text||p.photo?8:0 }}>
                     <div>
-                      {p.item && <div style={{ fontSize:13, fontWeight:700 }}>{p.item}</div>}
-                      <div style={{ fontSize:10, color:S.muted, marginTop:2 }}>{p.city} · {p.time}</div>
+                      {p.item && <div style={{ fontSize:13, fontWeight:700, color:"#ffffff" }}>{p.item}</div>}
+                      <div style={{ fontSize:10, color:"rgba(255,255,255,0.6)", marginTop:2 }}>{p.city} · {p.time}</div>
                     </div>
-                    {p.price && <div style={{ fontFamily:"Georgia,serif", fontSize:15, color:S.accent, fontWeight:700, flexShrink:0 }}>{parseFloat(p.price).toLocaleString()} {p.currency}</div>}
+                    {p.price && <div style={{ fontFamily:"Georgia,serif", fontSize:15, color:S.pink, fontWeight:800, flexShrink:0, textShadow:"0 0 12px rgba(244,114,182,0.5)" }}>{parseFloat(p.price).toLocaleString()} {p.currency}</div>}
                   </div>
-                  {p.text && <div style={{ fontSize:12, color:"#333", lineHeight:1.6, marginBottom:p.photo?8:0 }}>{p.text}</div>}
+                  {p.text && <div style={{ fontSize:12, color:"rgba(255,255,255,0.85)", lineHeight:1.6, marginBottom:p.photo?8:0 }}>{p.text}</div>}
                   {p.photo && <img src={p.photo} style={{ width:"100%", borderRadius:10, maxHeight:200, objectFit:"cover" }} />}
                 </div>
               ))}
@@ -3556,7 +3658,7 @@ export default function App() {
       </div>
 
       {/* ── BOTTOM NAV ── */}
-      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:860, background:"rgba(255,255,255,0.97)", backdropFilter:"blur(20px)", borderTop:`1px solid ${S.border}`, display:"flex", zIndex:100 }}>
+      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:860, background:"rgba(10,26,46,0.75)", backdropFilter:"blur(20px) saturate(160%)", WebkitBackdropFilter:"blur(20px) saturate(160%)", borderTop:"1px solid rgba(255,255,255,0.15)", display:"flex", zIndex:100 }}>
         {[
           ["check","🔍",t.tabC],
           ["scam","⚠️",t.tabS],
@@ -3565,8 +3667,8 @@ export default function App() {
           ["trend","📊",t.tabTd],
           ["db","🗄️",t.tabD],
         ].map(([id,icon,label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ flex:1, padding:"11px 0 7px", textAlign:"center", cursor:"pointer", color:tab===id?S.accent:S.muted, fontSize:8, fontFamily:"inherit", letterSpacing:0.2, border:"none", background:"none", fontWeight:tab===id?700:400 }}>
-            <div style={{ fontSize:16, marginBottom:2 }}>{icon}</div>{label}
+          <button key={id} onClick={() => setTab(id)} style={{ flex:1, padding:"11px 0 7px", textAlign:"center", cursor:"pointer", color:tab===id?"#ffb380":"rgba(255,255,255,0.65)", fontSize:9, fontFamily:"inherit", letterSpacing:0.2, border:"none", background:"none", fontWeight:tab===id?800:500 }}>
+            <div style={{ fontSize:18, marginBottom:2, filter: tab===id?"drop-shadow(0 0 8px rgba(255,179,128,0.6))":"none" }}>{icon}</div>{label}
           </button>
         ))}
       </div>
@@ -3584,23 +3686,23 @@ export default function App() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position:"fixed", bottom:95, left:"50%", transform:"translateX(-50%)", background:S.accent, color:"#fff", padding:"10px 20px", borderRadius:24, fontSize:12, fontWeight:600, zIndex:200, whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(26,86,160,0.5)" }}>{toast}</div>
+        <div style={{ position:"fixed", bottom:95, left:"50%", transform:"translateX(-50%)", background:"linear-gradient(135deg,#ec4899,#f472b6)", color:"#fff", padding:"10px 20px", borderRadius:24, fontSize:12, fontWeight:700, zIndex:200, whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(244,114,182,0.5)" }}>{toast}</div>
       )}
 
       {/* 設定モーダル */}
       {showSettings && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:300, display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={() => setShowSettings(false)}>
-          <div style={{ background:"#fff", borderRadius:"20px 20px 0 0", padding:24, width:"100%", maxWidth:860, maxHeight:"75vh", overflowY:"auto" }} onClick={e => e.stopPropagation()}>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)", zIndex:300, display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={() => setShowSettings(false)}>
+          <div style={{ background:"rgba(20,40,70,0.85)", backdropFilter:"blur(24px) saturate(160%)", WebkitBackdropFilter:"blur(24px) saturate(160%)", borderRadius:"20px 20px 0 0", padding:24, width:"100%", maxWidth:860, maxHeight:"75vh", overflowY:"auto", borderTop:"1px solid rgba(255,255,255,0.18)" }} onClick={e => e.stopPropagation()}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-              <div style={{ fontSize:17, fontWeight:800, color:"#1a1a14" }}>{t.settingsTitle}</div>
-              <button onClick={() => setShowSettings(false)} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:S.muted }}>✕</button>
+              <div style={{ fontSize:17, fontWeight:800, color:"#ffffff" }}>{t.settingsTitle}</div>
+              <button onClick={() => setShowSettings(false)} style={{ background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", fontSize:16, cursor:"pointer", color:"#ffffff", width:32, height:32, borderRadius:"50%" }}>✕</button>
             </div>
             {Object.entries(hText).map(([key, text]) => (
-              <div key={key} style={{ background:S.tag, borderRadius:12, padding:"12px 14px", marginBottom:8 }}>
-                <div style={{ fontSize:12, lineHeight:1.7, color:"#333" }}>{text}</div>
+              <div key={key} style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"12px 14px", marginBottom:8 }}>
+                <div style={{ fontSize:12, lineHeight:1.7, color:"rgba(255,255,255,0.9)" }}>{text}</div>
               </div>
             ))}
-            <div style={{ marginTop:12, padding:"10px 14px", background:"#deeeff", borderRadius:12, fontSize:11, color:"#003f7a", lineHeight:1.6 }}>
+            <div style={{ marginTop:12, padding:"10px 14px", background:"rgba(255,179,128,0.15)", border:"1px solid rgba(255,179,128,0.3)", borderRadius:12, fontSize:11, color:"#ffd9b8", lineHeight:1.6 }}>
               {t.settingsNote}
             </div>
           </div>
