@@ -91,28 +91,79 @@ async function translateText(text, fromLang, toLang, toLocalName) {
   if (!text || !text.trim()) return "";
   // 同じ言語なら翻訳不要
   if (fromLang === toLang) return text;
-  // MyMemory Translation API (無料・APIキー不要・CORS対応)
-  // 言語コードマッピング (BCP-47形式)
+
+  // 言語コードマッピング
   const langMap = {
-    ja:"ja", en:"en", zh:"zh-CN", ko:"ko", es:"es", pt:"pt-BR",
+    ja:"ja", en:"en", zh:"zh", ko:"ko", es:"es", pt:"pt",
     th:"th", vi:"vi", id:"id", ms:"ms", hi:"hi", fr:"fr", it:"it",
     de:"de", ar:"ar", tr:"tr", ru:"ru", nl:"nl", fi:"fi", no:"no",
     el:"el", mn:"mn", km:"km", lo:"lo",
   };
   const from = langMap[fromLang] || "en";
   const to = langMap[toLang] || "en";
+
+  // ── 戦略：複数の翻訳サービスを順番に試す ──
+
+  // 1. Google Translate 公式ウェブAPI（無料・無認証・高精度・長文対応）
   try {
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`;
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(text)}`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      // data[0] は文ごとの翻訳配列。全てを結合
+      if (Array.isArray(data) && Array.isArray(data[0])) {
+        const translated = data[0].map(seg => seg[0]).filter(Boolean).join("");
+        if (translated && translated.trim()) return translated;
+      }
+    }
+  } catch (err) { /* fallback */ }
+
+  // 2. MyMemory APIへフォールバック（短文向け）
+  try {
+    const myMemoryLangMap = {
+      ja:"ja", en:"en", zh:"zh-CN", ko:"ko", es:"es", pt:"pt-BR",
+      th:"th", vi:"vi", id:"id", ms:"ms", hi:"hi", fr:"fr", it:"it",
+      de:"de", ar:"ar", tr:"tr", ru:"ru", nl:"nl", fi:"fi", no:"no",
+      el:"el",
+    };
+    const fromMM = myMemoryLangMap[fromLang] || "en";
+    const toMM = myMemoryLangMap[toLang] || "en";
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${fromMM}|${toMM}`;
     const res = await fetch(url);
     const data = await res.json();
     if (data?.responseData?.translatedText) {
       return data.responseData.translatedText;
     }
-    return "";
-  } catch (err) {
-    console.error("Translation error:", err);
-    return "";
-  }
+  } catch (err) { /* fallback */ }
+
+  return "";
+}
+
+// 言語コード → 表示名（自言語版）
+function getLangDisplayName(code, uiLang) {
+  const names = {
+    ja: { ja:"日本語", en:"Japanese", zh:"日语", ko:"일본어", es:"Japonés", pt:"Japonês" },
+    en: { ja:"英語", en:"English", zh:"英语", ko:"영어", es:"Inglés", pt:"Inglês" },
+    zh: { ja:"中国語", en:"Chinese", zh:"中文", ko:"중국어", es:"Chino", pt:"Chinês" },
+    ko: { ja:"韓国語", en:"Korean", zh:"韩语", ko:"한국어", es:"Coreano", pt:"Coreano" },
+    es: { ja:"スペイン語", en:"Spanish", zh:"西班牙语", ko:"스페인어", es:"Español", pt:"Espanhol" },
+    pt: { ja:"ポルトガル語", en:"Portuguese", zh:"葡萄牙语", ko:"포르투갈어", es:"Portugués", pt:"Português" },
+    th: { ja:"タイ語", en:"Thai", zh:"泰语", ko:"태국어", es:"Tailandés", pt:"Tailandês" },
+    vi: { ja:"ベトナム語", en:"Vietnamese", zh:"越南语", ko:"베트남어", es:"Vietnamita", pt:"Vietnamita" },
+    id: { ja:"インドネシア語", en:"Indonesian", zh:"印尼语", ko:"인도네시아어", es:"Indonesio", pt:"Indonésio" },
+    ms: { ja:"マレー語", en:"Malay", zh:"马来语", ko:"말레이어", es:"Malayo", pt:"Malaio" },
+    hi: { ja:"ヒンディー語", en:"Hindi", zh:"印地语", ko:"힌디어", es:"Hindi", pt:"Hindi" },
+    fr: { ja:"フランス語", en:"French", zh:"法语", ko:"프랑스어", es:"Francés", pt:"Francês" },
+    it: { ja:"イタリア語", en:"Italian", zh:"意大利语", ko:"이탈리아어", es:"Italiano", pt:"Italiano" },
+    de: { ja:"ドイツ語", en:"German", zh:"德语", ko:"독일어", es:"Alemán", pt:"Alemão" },
+    ar: { ja:"アラビア語", en:"Arabic", zh:"阿拉伯语", ko:"아랍어", es:"Árabe", pt:"Árabe" },
+    tr: { ja:"トルコ語", en:"Turkish", zh:"土耳其语", ko:"터키어", es:"Turco", pt:"Turco" },
+    ru: { ja:"ロシア語", en:"Russian", zh:"俄语", ko:"러시아어", es:"Ruso", pt:"Russo" },
+    nl: { ja:"オランダ語", en:"Dutch", zh:"荷兰语", ko:"네덜란드어", es:"Neerlandés", pt:"Holandês" },
+    el: { ja:"ギリシャ語", en:"Greek", zh:"希腊语", ko:"그리스어", es:"Griego", pt:"Grego" },
+    mn: { ja:"モンゴル語", en:"Mongolian", zh:"蒙古语", ko:"몽골어", es:"Mongol", pt:"Mongol" },
+  };
+  return names[code]?.[uiLang] || names[code]?.en || code;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -2564,7 +2615,23 @@ export default function App() {
       window.speechSynthesis.getVoices();
       window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
     }
+    // ブラウザの自動翻訳を抑制（Chromeで「翻訳しますか?」が出るのを防ぐ）
+    try {
+      let meta = document.querySelector('meta[name="google"]');
+      if (!meta) {
+        meta = document.createElement("meta");
+        meta.name = "google";
+        document.head.appendChild(meta);
+      }
+      meta.content = "notranslate";
+      document.documentElement.classList.add("notranslate");
+    } catch {}
   }, []);
+
+  // 言語が変わったら <html lang> も同期させる（ブラウザ自動翻訳の判断材料）
+  useEffect(() => {
+    try { document.documentElement.lang = lang; } catch {}
+  }, [lang]);
 
   useEffect(() => {
     if (result && result.isExpensive && globalCountry) setNegotiateCountry(globalCountry);
@@ -3450,7 +3517,7 @@ export default function App() {
 
                   {/* あなた → 現地語 */}
                   <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
-                    <div style={{ fontSize:12, fontWeight:800, color:"#ffb380", marginBottom:10, letterSpacing:0.5 }}>🗣️ {t.transYou}</div>
+                    <div style={{ fontSize:13, fontWeight:800, color:"#ffb380", marginBottom:10, letterSpacing:0.3 }}>🗣️ {getLangDisplayName(lang, lang)} → {getLangDisplayName(globalCountry.localLang, lang)}</div>
                     <textarea
                       value={youText}
                       onChange={e => setYouText(e.target.value)}
@@ -3483,7 +3550,7 @@ export default function App() {
 
                   {/* 相手 → あなたの言語 */}
                   <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
-                    <div style={{ fontSize:12, fontWeight:800, color:"#ffb380", marginBottom:10, letterSpacing:0.5 }}>👂 {t.transPartner}</div>
+                    <div style={{ fontSize:13, fontWeight:800, color:"#ffb380", marginBottom:10, letterSpacing:0.3 }}>👂 {getLangDisplayName(globalCountry.localLang, lang)} → {getLangDisplayName(lang, lang)}</div>
                     <textarea
                       value={partnerText}
                       onChange={e => setPartnerText(e.target.value)}
