@@ -1280,6 +1280,7 @@ const MAIN_CATS = [
   {id:"hotel",icon:"🏨",name:{ja:"ホテル",en:"Hotel",zh:"酒店",ko:"호텔",es:"Hotel",pt:"Hotel"},hint:{ja:"1泊あたり",en:"Per night",zh:"每晚",ko:"1박 기준",es:"Por noche",pt:"Por noite"}},
   {id:"shopping",icon:"🛍️",name:{ja:"ショッピング",en:"Shopping",zh:"购物",ko:"쇼핑",es:"Compras",pt:"Compras"},hint:{ja:"衣料・雑貨",en:"Clothes & goods",zh:"服饰·杂货",ko:"의류·잡화",es:"Ropa y artículos",pt:"Roupas e artigos"}},
   {id:"activity",icon:"🎡",name:{ja:"観光・体験",en:"Activities",zh:"观光·体验",ko:"관광·체험",es:"Actividades",pt:"Atividades"},hint:{ja:"入場・ツアー",en:"Entry & tours",zh:"入场·旅游",ko:"입장·투어",es:"Entrada y tours",pt:"Entrada e tours"}},
+  {id:"famous",icon:"🌟",name:{ja:"名物・名所",en:"Famous",zh:"名物·名胜",ko:"명물·명소",es:"Famosos",pt:"Famosos"},hint:{ja:"その土地の名物",en:"Local specialties",zh:"当地特色",ko:"현지 명물",es:"Especialidades",pt:"Especialidades"}},
 ];
 
 const FOOD_GROUPS = [
@@ -1312,6 +1313,14 @@ const SUB_CATS = {
   hotel:{ja:["🏠 ゲストハウス","⭐ ビジネス","⭐⭐ 中級","⭐⭐⭐ 高級","🏖️ リゾート"],en:["🏠 Hostel/Guesthouse","⭐ Business","⭐⭐ Mid-range","⭐⭐⭐ Luxury","🏖️ Resort"],zh:["🏠 青旅/客栈","⭐ 商务","⭐⭐ 中档","⭐⭐⭐ 豪华","🏖️ 度假村"],ko:["🏠 게스트하우스","⭐ 비즈니스","⭐⭐ 중급","⭐⭐⭐ 고급","🏖️ 리조트"],es:["🏠 Hostal","⭐ Negocio","⭐⭐ Medio","⭐⭐⭐ Lujo","🏖️ Resort"],pt:["🏠 Hostel","⭐ Negócios","⭐⭐ Médio","⭐⭐⭐ Luxo","🏖️ Resort"]},
   shopping:{ja:["👕 衣料","💄 コスメ","🛒 スーパー","🎁 おみやげ","💻 家電"],en:["👕 Clothing","💄 Cosmetics","🛒 Grocery","🎁 Souvenirs","💻 Electronics"],zh:["👕 服装","💄 化妆品","🛒 超市","🎁 纪念品","💻 电子产品"],ko:["👕 의류","💄 화장품","🛒 마트","🎁 기념품","💻 전자기기"],es:["👕 Ropa","💄 Cosméticos","🛒 Supermercado","🎁 Souvenirs","💻 Electrónica"],pt:["👕 Roupas","💄 Cosméticos","🛒 Supermercado","🎁 Souvenirs","💻 Eletrônicos"]},
   activity:{ja:["🏛️ 観光入場","🤿 アクティビティ","💆 マッサージ","🎭 エンタメ","🚌 ツアー"],en:["🏛️ Attraction entry","🤿 Activities","💆 Massage/Spa","🎭 Entertainment","🚌 Tour"],zh:["🏛️ 景点门票","🤿 活动体验","💆 按摩·SPA","🎭 娱乐演出","🚌 旅游团"],ko:["🏛️ 관광지 입장","🤿 액티비티","💆 마사지·스파","🎭 엔터테인먼트","🚌 투어"],es:["🏛️ Entrada","🤿 Actividades","💆 Masaje/Spa","🎭 Entretenimiento","🚌 Tour"],pt:["🏛️ Entrada","🤿 Atividades","💆 Massagem/Spa","🎭 Entretenimento","🚌 Tour"]},
+  famous:{
+    ja:["🍣 寿司（高級）","🍣 寿司（回転）","🍜 ラーメン","🍤 天ぷら","🥩 すき焼き","🥞 もんじゃ焼き","🍱 鰻重","🐡 ふぐコース","🐭 ディズニー","🗼 展望タワー","🎨 デジタルアート","🐠 水族館","🐼 動物園","🥋 大相撲観戦","👘 着物レンタル","🍡 屋形船","🧙 ハリポタツアー","🎬 ジブリ美術館"],
+    en:["🍣 Sushi (Premium)","🍣 Sushi (Conveyor)","🍜 Ramen","🍤 Tempura","🥩 Sukiyaki","🥞 Monjayaki","🍱 Unagi","🐡 Fugu Course","🐭 Disney","🗼 Observation Tower","🎨 Digital Art","🐠 Aquarium","🐼 Zoo","🥋 Sumo Match","👘 Kimono Rental","🍡 Yakatabune","🧙 Harry Potter Tour","🎬 Ghibli Museum"],
+    zh:["🍣 寿司（高级）","🍣 回转寿司","🍜 拉面","🍤 天妇罗","🥩 寿喜烧","🥞 文字烧","🍱 鳗鱼饭","🐡 河豚套餐","🐭 迪士尼","🗼 观景塔","🎨 数字艺术","🐠 水族馆","🐼 动物园","🥋 相扑观战","👘 和服租借","🍡 屋形船","🧙 哈利波特之旅","🎬 吉卜力美术馆"],
+    ko:["🍣 스시 (고급)","🍣 회전스시","🍜 라멘","🍤 텐푸라","🥩 스키야키","🥞 몬자야키","🍱 장어덮밥","🐡 복어코스","🐭 디즈니","🗼 전망타워","🎨 디지털아트","🐠 수족관","🐼 동물원","🥋 스모관전","👘 기모노대여","🍡 야카타부네","🧙 해리포터투어","🎬 지브리미술관"],
+    es:["🍣 Sushi (Premium)","🍣 Sushi giratorio","🍜 Ramen","🍤 Tempura","🥩 Sukiyaki","🥞 Monjayaki","🍱 Unagi","🐡 Curso Fugu","🐭 Disney","🗼 Mirador","🎨 Arte digital","🐠 Acuario","🐼 Zoológico","🥋 Sumo","👘 Kimono","🍡 Yakatabune","🧙 Harry Potter","🎬 Museo Ghibli"],
+    pt:["🍣 Sushi (Premium)","🍣 Sushi giratório","🍜 Ramen","🍤 Tempura","🥩 Sukiyaki","🥞 Monjayaki","🍱 Unagi","🐡 Curso Fugu","🐭 Disney","🗼 Mirante","🎨 Arte digital","🐠 Aquário","🐼 Zoológico","🥋 Sumô","👘 Kimono","🍡 Yakatabune","🧙 Harry Potter","🎬 Museu Ghibli"]
+  },
 };
 
 // ─────────────────────────────────────────────────────────
@@ -1375,6 +1384,26 @@ const PRICE_DB = {
       "💆 マッサージ":{min:3000,avg:7000,max:25000,trend:"+5%",reason:"マッサージ3000〜8000円/時間。温泉500〜3000円。"},
       "🎭 エンタメ":{min:1500,avg:9000,max:35000,trend:"+8%",reason:"歌舞伎2000〜20000円。コンサート6000〜18000円。"},
       "🚌 ツアー":{min:4000,avg:12000,max:60000,trend:"+10%",reason:"日帰りバスツアー4000〜18000円。"},
+    },
+    famous:{
+      "🍣 寿司（高級）":{min:6000,avg:20000,max:80000,trend:"+10%",reason:"銀座おまかせディナー20000〜40000円。最高級店40000〜80000円以上。ランチ6000〜10000円。"},
+      "🍣 寿司（回転）":{min:500,avg:1800,max:5000,trend:"+8%",reason:"スシロー・くら寿司は税込120円皿〜。1人500〜3000円が標準。"},
+      "🍜 ラーメン":{min:800,avg:1200,max:2500,trend:"+12%",reason:"標準店800〜1200円。高級店1500〜2500円。全国平均729円（2026年1月）。"},
+      "🍤 天ぷら":{min:3000,avg:15000,max:30000,trend:"+8%",reason:"高級店ディナー15000〜30000円。ランチ3000〜8000円。パレスホテル巽22000円。"},
+      "🥩 すき焼き":{min:10000,avg:18000,max:26000,trend:"+10%",reason:"中級10000〜15000円（人形町今半など）。松阪・米沢牛21000〜26000円（日山等）。"},
+      "🥞 もんじゃ焼き":{min:1500,avg:2500,max:3500,trend:"+8%",reason:"月島もんじゃ。1人1500〜3500円。コース料理は2500円〜。"},
+      "🍱 鰻重":{min:3000,avg:5500,max:10000,trend:"+15%",reason:"鰻重3000〜10000円。老舗高級店は8000円以上。鰻価格高騰中。"},
+      "🐡 ふぐコース":{min:15000,avg:25000,max:40000,trend:"+8%",reason:"ふぐコース15000〜40000円。最高級店は40000円以上。"},
+      "🐭 ディズニー":{min:7900,avg:9400,max:10900,trend:"+5%",reason:"東京ディズニーランド/シー 1デーパスポート7900〜10900円（6段階変動価格制）。"},
+      "🗼 展望タワー":{min:1500,avg:2700,max:4800,trend:"+10%",reason:"東京タワーメインデッキ1500円。スカイツリー天望デッキ1800〜3600円。セット券3000〜4800円。渋谷スカイ2700〜3700円。"},
+      "🎨 デジタルアート":{min:3800,avg:4000,max:4200,trend:"+5%",reason:"teamLab Planets TOKYO：平日3800円、休日4200円。中高生2800円。"},
+      "🐠 水族館":{min:2400,avg:2700,max:3000,trend:"+8%",reason:"すみだ水族館2700円（2026.2.10改定）。サンシャイン水族館2600〜3000円。"},
+      "🐼 動物園":{min:600,avg:600,max:600,trend:"±0%",reason:"上野動物園：一般600円、65歳以上300円、中学生200円、小学生以下無料。"},
+      "🥋 大相撲観戦":{min:3500,avg:9000,max:15000,trend:"+5%",reason:"両国国技館：イスC席3500〜4000円、イスA席8000〜8500円、マスC席8500〜9500円、マスS席14000〜15000円。"},
+      "👘 着物レンタル":{min:2000,avg:4000,max:11000,trend:"+8%",reason:"標準プラン3000〜5000円。カップル8000円。メンズ5000円。振袖9000〜11000円。"},
+      "🍡 屋形船":{min:6000,avg:12000,max:25000,trend:"+10%",reason:"乗合ディナー10000〜25000円（食事飲み物込）。ランチ6000〜10000円。"},
+      "🧙 ハリポタツアー":{min:6300,avg:6650,max:7000,trend:"+5%",reason:"ワーナーブラザース スタジオツアー東京：大人6300〜7000円（2026.1.17改定、時期で変動）。中人5200〜5800円。"},
+      "🎬 ジブリ美術館":{min:1000,avg:1000,max:1000,trend:"±0%",reason:"三鷹の森ジブリ美術館：大人1000円、高校・中学700円、小学生400円、幼児（4歳〜）100円。完全予約制。"},
     },
   },
   タイ:{
@@ -3153,6 +3182,7 @@ export default function App() {
               <button key={c.name} onClick={() => {
                 setGlobalCountry(c); setCity(null); setResult(null); setCompareItems([]); setNegotiateCountry(null);
                 setScamCity(null); setYouText(""); setYouTranslated(""); setPartnerText(""); setPartnerTranslated("");
+                if (c.name !== "日本" && mainCat?.id === "famous") { setMainCat(null); setSubCatJa(null); }
               }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 11px", background:globalCountry?.name===c.name?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.18)", border:`1.5px solid ${globalCountry?.name===c.name?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.3)"}`, borderRadius:36, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0, color:globalCountry?.name===c.name?S.accent:"#fff", fontSize:11, fontWeight:globalCountry?.name===c.name?700:400 }}>
                 <span style={{ fontSize:14 }}>{c.flag}</span>{c.label?.[lang] || c.name}
               </button>
@@ -3192,7 +3222,7 @@ export default function App() {
               {city && <>
                 <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:7 }}>{t.s3}</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:7, marginBottom:14 }}>
-                  {MAIN_CATS.map(c => (
+                  {MAIN_CATS.filter(c => c.id !== "famous" || globalCountry?.name === "日本").map(c => (
                     <button key={c.id} onClick={() => { setMainCat(c); setSubCatJa(null); setFoodGroup(null); setResult(null); setCompareItems([]); }} style={{ background:mainCat?.id===c.id?"rgba(244,114,182,0.28)":S.card, border:`2px solid ${mainCat?.id===c.id?S.pink:S.border}`, borderRadius:12, padding:12, cursor:"pointer", textAlign:"left", boxShadow:mainCat?.id===c.id?"0 4px 18px rgba(244,114,182,0.35)":"0 1px 3px rgba(0,0,0,0.2)" }}>
                       <div style={{ fontSize:20, marginBottom:4 }}>{c.icon}</div>
                       <div style={{ fontSize:12, fontWeight:700, color:"#ffffff" }}>{c.name[lang] || c.name.ja}</div>
@@ -3249,6 +3279,17 @@ export default function App() {
 
               {/* ④ Amount */}
               {mainCat && subCatJa && <>
+                {mainCat.id === "famous" && city !== "東京" ? (
+                  <div style={{ background:"rgba(255,140,66,0.15)", border:"1.5px solid rgba(255,140,66,0.45)", borderRadius:13, padding:18, marginBottom:12, textAlign:"center" }}>
+                    <div style={{ fontSize:30, marginBottom:8 }}>🚧</div>
+                    <div style={{ fontSize:13, fontWeight:700, color:"#ffd9b8", marginBottom:5 }}>
+                      {{ja:"このエリアは準備中です",en:"This area is coming soon",zh:"该地区数据准备中",ko:"이 지역은 준비 중입니다",es:"Esta área está en preparación",pt:"Esta área em preparação"}[lang] || "このエリアは準備中です"}
+                    </div>
+                    <div style={{ fontSize:11, color:S.muted, lineHeight:1.6 }}>
+                      {{ja:"現在は東京のみ対応。京都・大阪・札幌など順次拡大予定です。",en:"Currently Tokyo only. Kyoto, Osaka, Sapporo and more coming soon.",zh:"目前仅支持东京。京都、大阪、札幌等地区即将上线。",ko:"현재 도쿄만 지원합니다. 교토·오사카·삿포로 등 순차 확대 예정.",es:"Solo Tokio por ahora. Kioto, Osaka, Sapporo próximamente.",pt:"Apenas Tóquio por enquanto. Kyoto, Osaka, Sapporo em breve."}[lang] || ""}
+                    </div>
+                  </div>
+                ) : <>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:7 }}>
                   <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase" }}>{t.s5}</div>
                   <button onClick={() => { setCompareMode(!compareMode); setResult(null); setCompareItems([]); }} style={{ fontSize:10, padding:"4px 11px", borderRadius:20, border:`1.5px solid ${compareMode?S.pink:S.border}`, background:compareMode?S.pink:"transparent", color:compareMode?"#fff":S.muted, cursor:"pointer" }}>{compareMode?t.cmpOn:t.cmpOff}</button>
@@ -3387,6 +3428,7 @@ export default function App() {
                     )}
                   </div>
                 )}
+                </>}
               </>}
             </div>
 
