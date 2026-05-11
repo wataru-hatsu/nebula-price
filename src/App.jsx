@@ -1314,12 +1314,30 @@ const SUB_CATS = {
   shopping:{ja:["👕 衣料","💄 コスメ","🛒 スーパー","🎁 おみやげ","💻 家電"],en:["👕 Clothing","💄 Cosmetics","🛒 Grocery","🎁 Souvenirs","💻 Electronics"],zh:["👕 服装","💄 化妆品","🛒 超市","🎁 纪念品","💻 电子产品"],ko:["👕 의류","💄 화장품","🛒 마트","🎁 기념품","💻 전자기기"],es:["👕 Ropa","💄 Cosméticos","🛒 Supermercado","🎁 Souvenirs","💻 Electrónica"],pt:["👕 Roupas","💄 Cosméticos","🛒 Supermercado","🎁 Souvenirs","💻 Eletrônicos"]},
   activity:{ja:["🏛️ 観光入場","🤿 アクティビティ","💆 マッサージ","🎭 エンタメ","🚌 ツアー"],en:["🏛️ Attraction entry","🤿 Activities","💆 Massage/Spa","🎭 Entertainment","🚌 Tour"],zh:["🏛️ 景点门票","🤿 活动体验","💆 按摩·SPA","🎭 娱乐演出","🚌 旅游团"],ko:["🏛️ 관광지 입장","🤿 액티비티","💆 마사지·스파","🎭 엔터테인먼트","🚌 투어"],es:["🏛️ Entrada","🤿 Actividades","💆 Masaje/Spa","🎭 Entretenimiento","🚌 Tour"],pt:["🏛️ Entrada","🤿 Atividades","💆 Massagem/Spa","🎭 Entretenimento","🚌 Tour"]},
   famous:{
-    ja:["🍣 寿司（高級）","🍣 寿司（回転）","🍜 ラーメン","🍤 天ぷら","🥩 すき焼き","🥞 もんじゃ焼き","🍱 鰻重","🐡 ふぐコース","🐭 ディズニー","🗼 展望タワー","🎨 デジタルアート","🐠 水族館","🐼 動物園","🥋 大相撲観戦","👘 着物レンタル","🍡 屋形船","🧙 ハリポタツアー","🎬 ジブリ美術館"],
-    en:["🍣 Sushi (Premium)","🍣 Sushi (Conveyor)","🍜 Ramen","🍤 Tempura","🥩 Sukiyaki","🥞 Monjayaki","🍱 Unagi","🐡 Fugu Course","🐭 Disney","🗼 Observation Tower","🎨 Digital Art","🐠 Aquarium","🐼 Zoo","🥋 Sumo Match","👘 Kimono Rental","🍡 Yakatabune","🧙 Harry Potter Tour","🎬 Ghibli Museum"],
-    zh:["🍣 寿司（高级）","🍣 回转寿司","🍜 拉面","🍤 天妇罗","🥩 寿喜烧","🥞 文字烧","🍱 鳗鱼饭","🐡 河豚套餐","🐭 迪士尼","🗼 观景塔","🎨 数字艺术","🐠 水族馆","🐼 动物园","🥋 相扑观战","👘 和服租借","🍡 屋形船","🧙 哈利波特之旅","🎬 吉卜力美术馆"],
-    ko:["🍣 스시 (고급)","🍣 회전스시","🍜 라멘","🍤 텐푸라","🥩 스키야키","🥞 몬자야키","🍱 장어덮밥","🐡 복어코스","🐭 디즈니","🗼 전망타워","🎨 디지털아트","🐠 수족관","🐼 동물원","🥋 스모관전","👘 기모노대여","🍡 야카타부네","🧙 해리포터투어","🎬 지브리미술관"],
-    es:["🍣 Sushi (Premium)","🍣 Sushi giratorio","🍜 Ramen","🍤 Tempura","🥩 Sukiyaki","🥞 Monjayaki","🍱 Unagi","🐡 Curso Fugu","🐭 Disney","🗼 Mirador","🎨 Arte digital","🐠 Acuario","🐼 Zoológico","🥋 Sumo","👘 Kimono","🍡 Yakatabune","🧙 Harry Potter","🎬 Museo Ghibli"],
-    pt:["🍣 Sushi (Premium)","🍣 Sushi giratório","🍜 Ramen","🍤 Tempura","🥩 Sukiyaki","🥞 Monjayaki","🍱 Unagi","🐡 Curso Fugu","🐭 Disney","🗼 Mirante","🎨 Arte digital","🐠 Aquário","🐼 Zoológico","🥋 Sumô","👘 Kimono","🍡 Yakatabune","🧙 Harry Potter","🎬 Museu Ghibli"]
+    東京:{
+      ja:["🍣 寿司（高級）","🍣 寿司（回転）","🍜 ラーメン","🍤 天ぷら","🥩 すき焼き","🥞 もんじゃ焼き","🍱 鰻重","🐡 ふぐコース","🐭 ディズニー","🗼 展望タワー","🎨 デジタルアート","🐠 水族館","🐼 動物園","🥋 大相撲観戦","👘 着物レンタル","🍡 屋形船","🧙 ハリポタツアー","🎬 ジブリ美術館"],
+      en:["🍣 Sushi (Premium)","🍣 Sushi (Conveyor)","🍜 Ramen","🍤 Tempura","🥩 Sukiyaki","🥞 Monjayaki","🍱 Unagi","🐡 Fugu Course","🐭 Disney","🗼 Observation Tower","🎨 Digital Art","🐠 Aquarium","🐼 Zoo","🥋 Sumo Match","👘 Kimono Rental","🍡 Yakatabune","🧙 Harry Potter Tour","🎬 Ghibli Museum"],
+      zh:["🍣 寿司（高级）","🍣 回转寿司","🍜 拉面","🍤 天妇罗","🥩 寿喜烧","🥞 文字烧","🍱 鳗鱼饭","🐡 河豚套餐","🐭 迪士尼","🗼 观景塔","🎨 数字艺术","🐠 水族馆","🐼 动物园","🥋 相扑观战","👘 和服租借","🍡 屋形船","🧙 哈利波特之旅","🎬 吉卜力美术馆"],
+      ko:["🍣 스시 (고급)","🍣 회전스시","🍜 라멘","🍤 텐푸라","🥩 스키야키","🥞 몬자야키","🍱 장어덮밥","🐡 복어코스","🐭 디즈니","🗼 전망타워","🎨 디지털아트","🐠 수족관","🐼 동물원","🥋 스모관전","👘 기모노대여","🍡 야카타부네","🧙 해리포터투어","🎬 지브리미술관"],
+      es:["🍣 Sushi (Premium)","🍣 Sushi giratorio","🍜 Ramen","🍤 Tempura","🥩 Sukiyaki","🥞 Monjayaki","🍱 Unagi","🐡 Curso Fugu","🐭 Disney","🗼 Mirador","🎨 Arte digital","🐠 Acuario","🐼 Zoológico","🥋 Sumo","👘 Kimono","🍡 Yakatabune","🧙 Harry Potter","🎬 Museo Ghibli"],
+      pt:["🍣 Sushi (Premium)","🍣 Sushi giratório","🍜 Ramen","🍤 Tempura","🥩 Sukiyaki","🥞 Monjayaki","🍱 Unagi","🐡 Curso Fugu","🐭 Disney","🗼 Mirante","🎨 Arte digital","🐠 Aquário","🐼 Zoológico","🥋 Sumô","👘 Kimono","🍡 Yakatabune","🧙 Harry Potter","🎬 Museu Ghibli"]
+    },
+    京都:{
+      ja:["⛩️ 清水寺","🏯 金閣寺","🏯 銀閣寺","🦊 伏見稲荷","🏰 二条城","🚞 嵯峨野トロッコ","🚣 保津川下り","🚂 鉄道博物館","🎬 太秦映画村","🍱 京懐石","🍲 湯豆腐","🍵 抹茶パフェ","🍜 京都ラーメン","🍜 にしんそば","🥟 京湯葉料理","👘 着物レンタル","🍵 茶道体験","💃 舞妓体験"],
+      en:["⛩️ Kiyomizu-dera","🏯 Kinkaku-ji","🏯 Ginkaku-ji","🦊 Fushimi Inari","🏰 Nijo Castle","🚞 Sagano Train","🚣 Hozugawa Boat","🚂 Railway Museum","🎬 Uzumasa Studio","🍱 Kaiseki","🍲 Yudofu","🍵 Matcha Parfait","🍜 Kyoto Ramen","🍜 Nishin Soba","🥟 Yuba Cuisine","👘 Kimono Rental","🍵 Tea Ceremony","💃 Maiko Experience"],
+      zh:["⛩️ 清水寺","🏯 金阁寺","🏯 银阁寺","🦊 伏见稻荷","🏰 二条城","🚞 嵯峨野小火车","🚣 保津川下り","🚂 铁道博物馆","🎬 太秦映画村","🍱 京怀石","🍲 汤豆腐","🍵 抹茶芭菲","🍜 京都拉面","🍜 鲱鱼荞麦面","🥟 京湯葉","👘 和服租借","🍵 茶道体验","💃 舞伎体验"],
+      ko:["⛩️ 기요미즈데라","🏯 킨카쿠지","🏯 긴카쿠지","🦊 후시미이나리","🏰 니조성","🚞 사가노 토롯코","🚣 호즈가와 뱃놀이","🚂 철도박물관","🎬 우즈마사 영화촌","🍱 가이세키","🍲 유도후","🍵 말차파르페","🍜 교토라멘","🍜 니신소바","🥟 유바요리","👘 기모노대여","🍵 다도체험","💃 마이코체험"],
+      es:["⛩️ Kiyomizu-dera","🏯 Kinkaku-ji","🏯 Ginkaku-ji","🦊 Fushimi Inari","🏰 Castillo Nijo","🚞 Tren Sagano","🚣 Río Hozugawa","🚂 Museo Ferroviario","🎬 Uzumasa","🍱 Kaiseki","🍲 Yudofu","🍵 Parfait matcha","🍜 Ramen Kioto","🍜 Nishin Soba","🥟 Yuba","👘 Kimono","🍵 Té Ceremonia","💃 Maiko"],
+      pt:["⛩️ Kiyomizu-dera","🏯 Kinkaku-ji","🏯 Ginkaku-ji","🦊 Fushimi Inari","🏰 Castelo Nijo","🚞 Trem Sagano","🚣 Rio Hozugawa","🚂 Museu Ferroviário","🎬 Uzumasa","🍱 Kaiseki","🍲 Yudofu","🍵 Parfait matcha","🍜 Ramen Kyoto","🍜 Nishin Soba","🥟 Yuba","👘 Kimono","🍵 Cerimônia chá","💃 Maiko"]
+    },
+    大阪:{
+      ja:["🎢 USJ","🏯 大阪城","🐠 海遊館","🗼 通天閣","🏢 あべのハルカス","🌉 空中庭園","🚢 御座船","🐙 たこ焼き","🥞 お好み焼き","🍢 串カツ","🐡 てっちり","🍜 肉吸い","🍣 大阪寿司","🍱 かすうどん","🥟 551豚まん","🎭 なんば花月","🎡 観覧車","🚤 リバークルーズ"],
+      en:["🎢 USJ","🏯 Osaka Castle","🐠 Kaiyukan","🗼 Tsutenkaku","🏢 Abeno Harukas","🌉 Sky Building","🚢 Gozabune","🐙 Takoyaki","🥞 Okonomiyaki","🍢 Kushikatsu","🐡 Tecchiri","🍜 Niku-sui","🍣 Osaka Sushi","🍱 Kasu Udon","🥟 551 Pork Bun","🎭 Namba Hanagekijo","🎡 Ferris Wheel","🚤 River Cruise"],
+      zh:["🎢 环球影城","🏯 大阪城","🐠 海游馆","🗼 通天阁","🏢 阿倍野HARUKAS","🌉 梅田蓝天大厦","🚢 御座船","🐙 章鱼烧","🥞 大阪烧","🍢 炸串","🐡 河豚火锅","🍜 肉吸","🍣 大阪寿司","🍱 大阪乌冬","🥟 551猪肉包","🎭 难波花月","🎡 摩天轮","🚤 道顿堀游船"],
+      ko:["🎢 유니버설 스튜디오","🏯 오사카성","🐠 카이유칸","🗼 츠텐카쿠","🏢 아베노 하루카스","🌉 우메다 스카이","🚢 고자부네","🐙 타코야키","🥞 오코노미야키","🍢 쿠시카츠","🐡 텟치리","🍜 니쿠스이","🍣 오사카초밥","🍱 카스우동","🥟 551 호라이","🎭 난바 하나게키죠","🎡 관람차","🚤 리버크루즈"],
+      es:["🎢 USJ","🏯 Castillo Osaka","🐠 Kaiyukan","🗼 Tsutenkaku","🏢 Abeno Harukas","🌉 Sky Building","🚢 Gozabune","🐙 Takoyaki","🥞 Okonomiyaki","🍢 Kushikatsu","🐡 Tecchiri","🍜 Niku-sui","🍣 Sushi Osaka","🍱 Kasu Udon","🥟 551 Bollo","🎭 Namba Hanagekijo","🎡 Noria","🚤 Crucero"],
+      pt:["🎢 USJ","🏯 Castelo Osaka","🐠 Kaiyukan","🗼 Tsutenkaku","🏢 Abeno Harukas","🌉 Sky Building","🚢 Gozabune","🐙 Takoyaki","🥞 Okonomiyaki","🍢 Kushikatsu","🐡 Tecchiri","🍜 Niku-sui","🍣 Sushi Osaka","🍱 Kasu Udon","🥟 551 Bolinho","🎭 Namba Hanagekijo","🎡 Roda-gigante","🚤 Cruzeiro"]
+    }
   },
 };
 
@@ -1386,24 +1404,66 @@ const PRICE_DB = {
       "🚌 ツアー":{min:4000,avg:12000,max:60000,trend:"+10%",reason:"日帰りバスツアー4000〜18000円。"},
     },
     famous:{
-      "🍣 寿司（高級）":{min:6000,avg:20000,max:80000,trend:"+10%",reason:"銀座おまかせディナー20000〜40000円。最高級店40000〜80000円以上。ランチ6000〜10000円。"},
-      "🍣 寿司（回転）":{min:500,avg:1800,max:5000,trend:"+8%",reason:"スシロー・くら寿司は税込120円皿〜。1人500〜3000円が標準。"},
-      "🍜 ラーメン":{min:800,avg:1200,max:2500,trend:"+12%",reason:"標準店800〜1200円。高級店1500〜2500円。全国平均729円（2026年1月）。"},
-      "🍤 天ぷら":{min:3000,avg:15000,max:30000,trend:"+8%",reason:"高級店ディナー15000〜30000円。ランチ3000〜8000円。パレスホテル巽22000円。"},
-      "🥩 すき焼き":{min:10000,avg:18000,max:26000,trend:"+10%",reason:"中級10000〜15000円（人形町今半など）。松阪・米沢牛21000〜26000円（日山等）。"},
-      "🥞 もんじゃ焼き":{min:1500,avg:2500,max:3500,trend:"+8%",reason:"月島もんじゃ。1人1500〜3500円。コース料理は2500円〜。"},
-      "🍱 鰻重":{min:3000,avg:5500,max:10000,trend:"+15%",reason:"鰻重3000〜10000円。老舗高級店は8000円以上。鰻価格高騰中。"},
-      "🐡 ふぐコース":{min:15000,avg:25000,max:40000,trend:"+8%",reason:"ふぐコース15000〜40000円。最高級店は40000円以上。"},
-      "🐭 ディズニー":{min:7900,avg:9400,max:10900,trend:"+5%",reason:"東京ディズニーランド/シー 1デーパスポート7900〜10900円（6段階変動価格制）。"},
-      "🗼 展望タワー":{min:1500,avg:2700,max:4800,trend:"+10%",reason:"東京タワーメインデッキ1500円。スカイツリー天望デッキ1800〜3600円。セット券3000〜4800円。渋谷スカイ2700〜3700円。"},
-      "🎨 デジタルアート":{min:3800,avg:4000,max:4200,trend:"+5%",reason:"teamLab Planets TOKYO：平日3800円、休日4200円。中高生2800円。"},
-      "🐠 水族館":{min:2400,avg:2700,max:3000,trend:"+8%",reason:"すみだ水族館2700円（2026.2.10改定）。サンシャイン水族館2600〜3000円。"},
-      "🐼 動物園":{min:600,avg:600,max:600,trend:"±0%",reason:"上野動物園：一般600円、65歳以上300円、中学生200円、小学生以下無料。"},
-      "🥋 大相撲観戦":{min:3500,avg:9000,max:15000,trend:"+5%",reason:"両国国技館：イスC席3500〜4000円、イスA席8000〜8500円、マスC席8500〜9500円、マスS席14000〜15000円。"},
-      "👘 着物レンタル":{min:2000,avg:4000,max:11000,trend:"+8%",reason:"標準プラン3000〜5000円。カップル8000円。メンズ5000円。振袖9000〜11000円。"},
-      "🍡 屋形船":{min:6000,avg:12000,max:25000,trend:"+10%",reason:"乗合ディナー10000〜25000円（食事飲み物込）。ランチ6000〜10000円。"},
-      "🧙 ハリポタツアー":{min:6300,avg:6650,max:7000,trend:"+5%",reason:"ワーナーブラザース スタジオツアー東京：大人6300〜7000円（2026.1.17改定、時期で変動）。中人5200〜5800円。"},
-      "🎬 ジブリ美術館":{min:1000,avg:1000,max:1000,trend:"±0%",reason:"三鷹の森ジブリ美術館：大人1000円、高校・中学700円、小学生400円、幼児（4歳〜）100円。完全予約制。"},
+      東京:{
+        "🍣 寿司（高級）":{min:6000,avg:20000,max:80000,trend:"+10%",reason:"銀座おまかせディナー20000〜40000円。最高級店40000〜80000円以上。ランチ6000〜10000円。"},
+        "🍣 寿司（回転）":{min:500,avg:1800,max:5000,trend:"+8%",reason:"スシロー・くら寿司は税込120円皿〜。1人500〜3000円が標準。"},
+        "🍜 ラーメン":{min:800,avg:1200,max:2500,trend:"+12%",reason:"標準店800〜1200円。高級店1500〜2500円。全国平均729円（2026年1月）。"},
+        "🍤 天ぷら":{min:3000,avg:15000,max:30000,trend:"+8%",reason:"高級店ディナー15000〜30000円。ランチ3000〜8000円。パレスホテル巽22000円。"},
+        "🥩 すき焼き":{min:10000,avg:18000,max:26000,trend:"+10%",reason:"中級10000〜15000円（人形町今半など）。松阪・米沢牛21000〜26000円（日山等）。"},
+        "🥞 もんじゃ焼き":{min:1500,avg:2500,max:3500,trend:"+8%",reason:"月島もんじゃ。1人1500〜3500円。コース料理は2500円〜。"},
+        "🍱 鰻重":{min:3000,avg:5500,max:10000,trend:"+15%",reason:"鰻重3000〜10000円。老舗高級店は8000円以上。鰻価格高騰中。"},
+        "🐡 ふぐコース":{min:15000,avg:25000,max:40000,trend:"+8%",reason:"ふぐコース15000〜40000円。最高級店は40000円以上。"},
+        "🐭 ディズニー":{min:7900,avg:9400,max:10900,trend:"+5%",reason:"東京ディズニーランド/シー 1デーパスポート7900〜10900円（6段階変動価格制）。"},
+        "🗼 展望タワー":{min:1500,avg:2700,max:4800,trend:"+10%",reason:"東京タワーメインデッキ1500円。スカイツリー天望デッキ1800〜3600円。セット券3000〜4800円。渋谷スカイ2700〜3700円。"},
+        "🎨 デジタルアート":{min:3800,avg:4000,max:4200,trend:"+5%",reason:"teamLab Planets TOKYO：平日3800円、休日4200円。中高生2800円。"},
+        "🐠 水族館":{min:2400,avg:2700,max:3000,trend:"+8%",reason:"すみだ水族館2700円（2026.2.10改定）。サンシャイン水族館2600〜3000円。"},
+        "🐼 動物園":{min:600,avg:600,max:600,trend:"±0%",reason:"上野動物園：一般600円、65歳以上300円、中学生200円、小学生以下無料。"},
+        "🥋 大相撲観戦":{min:3500,avg:9000,max:15000,trend:"+5%",reason:"両国国技館：イスC席3500〜4000円、イスA席8000〜8500円、マスC席8500〜9500円、マスS席14000〜15000円。"},
+        "👘 着物レンタル":{min:2000,avg:4000,max:11000,trend:"+8%",reason:"標準プラン3000〜5000円。カップル8000円。メンズ5000円。振袖9000〜11000円。"},
+        "🍡 屋形船":{min:6000,avg:12000,max:25000,trend:"+10%",reason:"乗合ディナー10000〜25000円（食事飲み物込）。ランチ6000〜10000円。"},
+        "🧙 ハリポタツアー":{min:6300,avg:6650,max:7000,trend:"+5%",reason:"ワーナーブラザース スタジオツアー東京：大人6300〜7000円（2026.1.17改定、時期で変動）。中人5200〜5800円。"},
+        "🎬 ジブリ美術館":{min:1000,avg:1000,max:1000,trend:"±0%",reason:"三鷹の森ジブリ美術館：大人1000円、高校・中学700円、小学生400円、幼児（4歳〜）100円。完全予約制。"},
+      },
+      京都:{
+        "⛩️ 清水寺":{min:500,avg:500,max:500,trend:"±0%",reason:"清水寺拝観料：大人500円、小中学生200円（2024年4月改定）。現金のみ。世界遺産。"},
+        "🏯 金閣寺":{min:500,avg:500,max:500,trend:"±0%",reason:"鹿苑寺（金閣寺）：高校生以上500円、小中学生300円。世界遺産。"},
+        "🏯 銀閣寺":{min:500,avg:500,max:500,trend:"±0%",reason:"慈照寺（銀閣寺）：高校生以上500円、小中学生300円（2026年4月改定予定）。世界遺産。"},
+        "🦊 伏見稲荷":{min:0,avg:0,max:0,trend:"±0%",reason:"伏見稲荷大社：参拝料無料。24時間参拝可能。千本鳥居が有名。"},
+        "🏰 二条城":{min:800,avg:1300,max:2300,trend:"+5%",reason:"入城料800円。入城+二の丸御殿1300円。本丸御殿（要予約）+1000円。世界遺産。"},
+        "🚞 嵯峨野トロッコ":{min:880,avg:880,max:880,trend:"+5%",reason:"嵯峨野観光鉄道：大人880円、子供440円。嵐山〜亀岡を約25分。要事前予約推奨。"},
+        "🚣 保津川下り":{min:6000,avg:6000,max:6000,trend:"+10%",reason:"保津川下り：大人6000円、子供4500円（2024年3月改定）。亀岡〜嵐山約16km・約90分の舟下り。"},
+        "🚂 鉄道博物館":{min:1500,avg:1500,max:1500,trend:"+5%",reason:"京都鉄道博物館：一般1500円、大学・高校生1300円、中小学生500円、幼児200円。SLスチーム号別途。"},
+        "🎬 太秦映画村":{min:2000,avg:2800,max:2800,trend:"+15%",reason:"太秦映画村1DAY：大人2800円、子供1600円。ナイトタイム2000円。2026年3月リニューアル後の新料金。"},
+        "🍱 京懐石":{min:4500,avg:10000,max:30000,trend:"+10%",reason:"昼コース4500〜11000円。ディナーコース10000〜30000円。ミシュラン店は15000〜30000円以上。"},
+        "🍲 湯豆腐":{min:1250,avg:3500,max:6000,trend:"+8%",reason:"嵐山・南禅寺名物。とようけ茶屋1250円〜。観光地の専門店3000〜6000円。コース料理は4000円〜。"},
+        "🍵 抹茶パフェ":{min:1265,avg:1500,max:3000,trend:"+10%",reason:"茶寮都路里：都路里パフェ1474円、特選1694円、白玉1265円。祇園本店限定「建都の極」3000円。"},
+        "🍜 京都ラーメン":{min:800,avg:1100,max:1500,trend:"+12%",reason:"第一旭・新福菜館など。背脂醤油系800〜1200円。京都駅周辺は1500円程度の店も。"},
+        "🍜 にしんそば":{min:1200,avg:1500,max:2000,trend:"+8%",reason:"祇園・南座近くの松葉本店など。京都の老舗そばの代表メニュー。1200〜2000円。"},
+        "🥟 京湯葉料理":{min:3000,avg:4500,max:7000,trend:"+8%",reason:"湯葉づくしコース。嵐山・南禅寺周辺の専門店。ランチ3000〜5000円、ディナー5000〜7000円。"},
+        "👘 着物レンタル":{min:3000,avg:5000,max:8000,trend:"+8%",reason:"標準プラン3080〜7700円。ヘアセット込み4000〜6000円。カップル8000円前後。夢館・梨花和服など。"},
+        "🍵 茶道体験":{min:3000,avg:4500,max:6000,trend:"+5%",reason:"茶道体験：3000〜6000円。着物レンタル併設プランも。京町家での本格体験は5000円〜。"},
+        "💃 舞妓体験":{min:10000,avg:18000,max:25000,trend:"+8%",reason:"舞妓変身→撮影→散策プラン。スタジオ撮影のみ10000〜15000円。屋外散策付き18000〜25000円。"},
+      },
+      大阪:{
+        "🎢 USJ":{min:8600,avg:10000,max:11900,trend:"+5%",reason:"USJ 1デイ・スタジオ・パス：大人8600〜11900円（変動価格制）、子供5600〜7400円。3歳以下無料。"},
+        "🏯 大阪城":{min:1200,avg:1200,max:1200,trend:"+100%",reason:"大阪城天守閣（豊臣石垣館込）：大人1200円（2025年4月値上げ）、大学・高校生600円、中学生以下無料。"},
+        "🐠 海遊館":{min:2400,avg:2700,max:3200,trend:"+8%",reason:"海遊館：大人2400〜3200円（4段階変動価格制）、シニア2200円、子供1400円、幼児700円。ジンベエザメで有名。"},
+        "🗼 通天閣":{min:1500,avg:1500,max:1500,trend:"+25%",reason:"通天閣（一般+特別屋外展望台セット）：大人1500円、子供800円（2026年4月一本化）。ビリケンさん。"},
+        "🏢 あべのハルカス":{min:2000,avg:2000,max:2000,trend:"+5%",reason:"ハルカス300：大人2000円、中高生1200円、小学生700円、幼児500円（4歳以上）。日本一高いビル300m。"},
+        "🌉 空中庭園":{min:2000,avg:2000,max:2000,trend:"+5%",reason:"梅田スカイビル空中庭園展望台：大人2000円、4歳〜小学生500円。地上173m360度のパノラマ。"},
+        "🚢 御座船":{min:1500,avg:1500,max:1500,trend:"+5%",reason:"大阪城御座船：大阪城お堀めぐり。大人1500円程度。黄金色の豪華船。約20分。"},
+        "🐙 たこ焼き":{min:300,avg:600,max:1200,trend:"+10%",reason:"屋台6個300〜480円、8個400〜640円。店内10個600〜800円。道頓堀の人気店は1000〜1200円。"},
+        "🥞 お好み焼き":{min:800,avg:1300,max:1800,trend:"+8%",reason:"豚玉800〜1200円。ミックス・海鮮入り1200〜1800円。鶴橋風月・千房など。"},
+        "🍢 串カツ":{min:120,avg:200,max:300,trend:"+8%",reason:"1本120〜300円。だるま等の老舗。コース10本1500〜2500円。新世界・難波が有名。"},
+        "🐡 てっちり":{min:10000,avg:15000,max:25000,trend:"+8%",reason:"ふぐ鍋コース10000〜25000円。大阪はふぐ消費量日本一。づぼらや跡や老舗専門店。"},
+        "🍜 肉吸い":{min:800,avg:1000,max:1200,trend:"+10%",reason:"千とせ（千日前）の名物。肉うどんから麺を抜いた料理。800〜1200円。"},
+        "🍣 大阪寿司":{min:1500,avg:2000,max:3000,trend:"+8%",reason:"押し寿司・バッテラ・箱寿司。1500〜3000円。吉野鯗・湖月など老舗。"},
+        "🍱 かすうどん":{min:800,avg:1000,max:1200,trend:"+8%",reason:"大阪南部発祥。牛もつの揚げカスが入ったうどん。800〜1200円。「加寿屋」など。"},
+        "🥟 551豚まん":{min:210,avg:240,max:500,trend:"+10%",reason:"551蓬莱の豚まん：1個210円〜。2個セット約500円。大阪土産の定番。蓬莱以外の店もあり。"},
+        "🎭 なんば花月":{min:4800,avg:5000,max:5300,trend:"+5%",reason:"なんばグランド花月（吉本新喜劇）：1階指定席5300円、2階指定席4800円。学生・シニア割引あり。"},
+        "🎡 観覧車":{min:600,avg:900,max:1000,trend:"+5%",reason:"道頓堀大観覧車（えびすタワー）600円。天保山大観覧車900円。HEPファイブ観覧車600円。"},
+        "🚤 リバークルーズ":{min:900,avg:1200,max:1500,trend:"+8%",reason:"とんぼりリバークルーズ：大人1200円、子供600円。道頓堀川約20分の遊覧船。"},
+      },
     },
   },
   タイ:{
@@ -1643,7 +1703,13 @@ function getPriceInfo(country, city, catId, subCatJa, dist, time, lang) {
   const db = PRICE_DB[country.name] || getDefaultDB(country);
   const cf = CITY_FACTOR[city] || 1.0;
   if (catId==="taxi") return getTaxiPrice(db[catId], subCatJa, dist, time, cf);
-  const base = db[catId]?.[subCatJa];
+  // famous は都市別ネスト構造
+  let base;
+  if (catId === "famous") {
+    base = db.famous?.[city]?.[subCatJa];
+  } else {
+    base = db[catId]?.[subCatJa];
+  }
   if (!base) return null;
   // 都市名を英語表記に
   const cityEN = getCityEN(country, city);
@@ -3213,7 +3279,7 @@ export default function App() {
                 <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:14 }}>
                   {(globalCountry.cities?.ja || []).map((jaKey, i) => {
                     const label = (globalCountry.cities?.[lang] || globalCountry.cities?.ja || [])[i] || jaKey;
-                    return <Pill key={jaKey} selected={city===jaKey} onClick={() => { setCity(jaKey); setResult(null); }} small>{label}</Pill>;
+                    return <Pill key={jaKey} selected={city===jaKey} onClick={() => { setCity(jaKey); setSubCatJa(null); setResult(null); }} small>{label}</Pill>;
                   })}
                 </div>
               </>}
@@ -3253,7 +3319,9 @@ export default function App() {
               {mainCat && mainCat.id !== "food" && <>
                 <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:7 }}>{t.s4b}</div>
                 {(() => {
-                  const sc = SUB_CATS[mainCat.id];
+                  // famousは都市別ネスト構造（東京・京都・大阪）
+                  const sc = mainCat.id === "famous" ? SUB_CATS.famous[city] : SUB_CATS[mainCat.id];
+                  if (!sc) return null;
                   const keys = sc.ja; const labels = sc[lang] || sc.ja;
                   return <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:14 }}>{keys.map((k,i) => <Pill key={k} selected={subCatJa===k} onClick={() => { setSubCatJa(k); setResult(null); }}>{labels[i]}</Pill>)}</div>;
                 })()}
@@ -3279,14 +3347,14 @@ export default function App() {
 
               {/* ④ Amount */}
               {mainCat && subCatJa && <>
-                {mainCat.id === "famous" && city !== "東京" ? (
+                {mainCat.id === "famous" && !["東京","京都","大阪"].includes(city) ? (
                   <div style={{ background:"rgba(255,140,66,0.15)", border:"1.5px solid rgba(255,140,66,0.45)", borderRadius:13, padding:18, marginBottom:12, textAlign:"center" }}>
                     <div style={{ fontSize:30, marginBottom:8 }}>🚧</div>
                     <div style={{ fontSize:13, fontWeight:700, color:"#ffd9b8", marginBottom:5 }}>
                       {{ja:"このエリアは準備中です",en:"This area is coming soon",zh:"该地区数据准备中",ko:"이 지역은 준비 중입니다",es:"Esta área está en preparación",pt:"Esta área em preparação"}[lang] || "このエリアは準備中です"}
                     </div>
                     <div style={{ fontSize:11, color:S.muted, lineHeight:1.6 }}>
-                      {{ja:"現在は東京のみ対応。京都・大阪・札幌など順次拡大予定です。",en:"Currently Tokyo only. Kyoto, Osaka, Sapporo and more coming soon.",zh:"目前仅支持东京。京都、大阪、札幌等地区即将上线。",ko:"현재 도쿄만 지원합니다. 교토·오사카·삿포로 등 순차 확대 예정.",es:"Solo Tokio por ahora. Kioto, Osaka, Sapporo próximamente.",pt:"Apenas Tóquio por enquanto. Kyoto, Osaka, Sapporo em breve."}[lang] || ""}
+                      {{ja:"現在は東京・京都・大阪のみ対応。札幌・横浜・名古屋など順次拡大予定です。",en:"Currently Tokyo, Kyoto and Osaka only. Sapporo, Yokohama, Nagoya and more coming soon.",zh:"目前仅支持东京、京都、大阪。札幌、横浜、名古屋等地区即将上线。",ko:"현재 도쿄·교토·오사카만 지원. 삿포로·요코하마·나고야 등 순차 확대 예정.",es:"Solo Tokio, Kioto y Osaka por ahora. Sapporo, Yokohama, Nagoya próximamente.",pt:"Apenas Tóquio, Kyoto e Osaka por enquanto. Sapporo, Yokohama, Nagoya em breve."}[lang] || ""}
                     </div>
                   </div>
                 ) : <>
