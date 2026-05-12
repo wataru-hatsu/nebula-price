@@ -4,8 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 // SPEECH SYNTHESIS
 // ─────────────────────────────────────────────────────────
 function speakText(text, langCode) {
-  if (!window.speechSynthesis || !text) return;
-  // 既存の発話をキャンセル
+  if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   const map = {
@@ -15,26 +14,9 @@ function speakText(text, langCode) {
     tr:"tr-TR", ru:"ru-RU", nl:"nl-NL", fi:"fi-FI", no:"nb-NO",
     el:"el-GR", mn:"mn-MN", km:"km-KH", lo:"lo-LA",
   };
-  const targetLang = map[langCode] || "en-US";
-  u.lang = targetLang;
-  u.rate = 0.9;
-  u.pitch = 1.0;
-  u.volume = 1.0;
-
-  // 利用可能な音声から最適なものを選ぶ
-  const voices = window.speechSynthesis.getVoices();
-  if (voices && voices.length > 0) {
-    // 厳密一致
-    let v = voices.find(vo => vo.lang === targetLang);
-    // 言語コードだけで一致 (例: en-US -> en-*)
-    if (!v) v = voices.find(vo => vo.lang.startsWith(targetLang.split("-")[0]));
-    if (v) u.voice = v;
-  }
-
-  // iOSで初回再生がよく失敗するので少し遅延させる
-  setTimeout(() => {
-    try { window.speechSynthesis.speak(u); } catch(e) { console.error("speak failed:", e); }
-  }, 50);
+  u.lang = map[langCode] || "en-US";
+  u.rate = 0.85;
+  window.speechSynthesis.speak(u);
 }
 
 // マイク開始/終了の効果音（ピロン音）
@@ -88,82 +70,22 @@ function playBeep(type) {
 // ANTHROPIC API TRANSLATION
 // ─────────────────────────────────────────────────────────
 async function translateText(text, fromLang, toLang, toLocalName) {
-  if (!text || !text.trim()) return "";
-  // 同じ言語なら翻訳不要
-  if (fromLang === toLang) return text;
-
-  // 言語コードマッピング
-  const langMap = {
-    ja:"ja", en:"en", zh:"zh", ko:"ko", es:"es", pt:"pt",
-    th:"th", vi:"vi", id:"id", ms:"ms", hi:"hi", fr:"fr", it:"it",
-    de:"de", ar:"ar", tr:"tr", ru:"ru", nl:"nl", fi:"fi", no:"no",
-    el:"el", mn:"mn", km:"km", lo:"lo",
-  };
-  const from = langMap[fromLang] || "en";
-  const to = langMap[toLang] || "en";
-
-  // ── 戦略：複数の翻訳サービスを順番に試す ──
-
-  // 1. Google Translate 公式ウェブAPI（無料・無認証・高精度・長文対応）
   try {
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(text)}`;
-    const res = await fetch(url);
-    if (res.ok) {
-      const data = await res.json();
-      // data[0] は文ごとの翻訳配列。全てを結合
-      if (Array.isArray(data) && Array.isArray(data[0])) {
-        const translated = data[0].map(seg => seg[0]).filter(Boolean).join("");
-        if (translated && translated.trim()) return translated;
-      }
-    }
-  } catch (err) { /* fallback */ }
-
-  // 2. MyMemory APIへフォールバック（短文向け）
-  try {
-    const myMemoryLangMap = {
-      ja:"ja", en:"en", zh:"zh-CN", ko:"ko", es:"es", pt:"pt-BR",
-      th:"th", vi:"vi", id:"id", ms:"ms", hi:"hi", fr:"fr", it:"it",
-      de:"de", ar:"ar", tr:"tr", ru:"ru", nl:"nl", fi:"fi", no:"no",
-      el:"el",
-    };
-    const fromMM = myMemoryLangMap[fromLang] || "en";
-    const toMM = myMemoryLangMap[toLang] || "en";
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${fromMM}|${toMM}`;
-    const res = await fetch(url);
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 300,
+        messages: [{
+          role: "user",
+          content: `Translate the following text to ${toLocalName} (language code: ${toLang}). This is for travel/price negotiation context. Return ONLY the translated text, nothing else, no explanations.\n\nText: ${text}`
+        }]
+      })
+    });
     const data = await res.json();
-    if (data?.responseData?.translatedText) {
-      return data.responseData.translatedText;
-    }
-  } catch (err) { /* fallback */ }
-
-  return "";
-}
-
-// 言語コード → 表示名（自言語版）
-function getLangDisplayName(code, uiLang) {
-  const names = {
-    ja: { ja:"日本語", en:"Japanese", zh:"日语", ko:"일본어", es:"Japonés", pt:"Japonês" },
-    en: { ja:"英語", en:"English", zh:"英语", ko:"영어", es:"Inglés", pt:"Inglês" },
-    zh: { ja:"中国語", en:"Chinese", zh:"中文", ko:"중국어", es:"Chino", pt:"Chinês" },
-    ko: { ja:"韓国語", en:"Korean", zh:"韩语", ko:"한국어", es:"Coreano", pt:"Coreano" },
-    es: { ja:"スペイン語", en:"Spanish", zh:"西班牙语", ko:"스페인어", es:"Español", pt:"Espanhol" },
-    pt: { ja:"ポルトガル語", en:"Portuguese", zh:"葡萄牙语", ko:"포르투갈어", es:"Portugués", pt:"Português" },
-    th: { ja:"タイ語", en:"Thai", zh:"泰语", ko:"태국어", es:"Tailandés", pt:"Tailandês" },
-    vi: { ja:"ベトナム語", en:"Vietnamese", zh:"越南语", ko:"베트남어", es:"Vietnamita", pt:"Vietnamita" },
-    id: { ja:"インドネシア語", en:"Indonesian", zh:"印尼语", ko:"인도네시아어", es:"Indonesio", pt:"Indonésio" },
-    ms: { ja:"マレー語", en:"Malay", zh:"马来语", ko:"말레이어", es:"Malayo", pt:"Malaio" },
-    hi: { ja:"ヒンディー語", en:"Hindi", zh:"印地语", ko:"힌디어", es:"Hindi", pt:"Hindi" },
-    fr: { ja:"フランス語", en:"French", zh:"法语", ko:"프랑스어", es:"Francés", pt:"Francês" },
-    it: { ja:"イタリア語", en:"Italian", zh:"意大利语", ko:"이탈리아어", es:"Italiano", pt:"Italiano" },
-    de: { ja:"ドイツ語", en:"German", zh:"德语", ko:"독일어", es:"Alemán", pt:"Alemão" },
-    ar: { ja:"アラビア語", en:"Arabic", zh:"阿拉伯语", ko:"아랍어", es:"Árabe", pt:"Árabe" },
-    tr: { ja:"トルコ語", en:"Turkish", zh:"土耳其语", ko:"터키어", es:"Turco", pt:"Turco" },
-    ru: { ja:"ロシア語", en:"Russian", zh:"俄语", ko:"러시아어", es:"Ruso", pt:"Russo" },
-    nl: { ja:"オランダ語", en:"Dutch", zh:"荷兰语", ko:"네덜란드어", es:"Neerlandés", pt:"Holandês" },
-    el: { ja:"ギリシャ語", en:"Greek", zh:"希腊语", ko:"그리스어", es:"Griego", pt:"Grego" },
-    mn: { ja:"モンゴル語", en:"Mongolian", zh:"蒙古语", ko:"몽골어", es:"Mongol", pt:"Mongol" },
-  };
-  return names[code]?.[uiLang] || names[code]?.en || code;
+    return data.content?.[0]?.text?.trim() || "";
+  } catch { return ""; }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -1280,7 +1202,6 @@ const MAIN_CATS = [
   {id:"hotel",icon:"🏨",name:{ja:"ホテル",en:"Hotel",zh:"酒店",ko:"호텔",es:"Hotel",pt:"Hotel"},hint:{ja:"1泊あたり",en:"Per night",zh:"每晚",ko:"1박 기준",es:"Por noche",pt:"Por noite"}},
   {id:"shopping",icon:"🛍️",name:{ja:"ショッピング",en:"Shopping",zh:"购物",ko:"쇼핑",es:"Compras",pt:"Compras"},hint:{ja:"衣料・雑貨",en:"Clothes & goods",zh:"服饰·杂货",ko:"의류·잡화",es:"Ropa y artículos",pt:"Roupas e artigos"}},
   {id:"activity",icon:"🎡",name:{ja:"観光・体験",en:"Activities",zh:"观光·体验",ko:"관광·체험",es:"Actividades",pt:"Atividades"},hint:{ja:"入場・ツアー",en:"Entry & tours",zh:"入场·旅游",ko:"입장·투어",es:"Entrada y tours",pt:"Entrada e tours"}},
-  {id:"famous",icon:"🌟",name:{ja:"名物・名所",en:"Famous",zh:"名物·名胜",ko:"명물·명소",es:"Famosos",pt:"Famosos"},hint:{ja:"その土地の名物",en:"Local specialties",zh:"当地特色",ko:"현지 명물",es:"Especialidades",pt:"Especialidades"}},
 ];
 
 const FOOD_GROUPS = [
@@ -1313,161 +1234,10 @@ const SUB_CATS = {
   hotel:{ja:["🏠 ゲストハウス","⭐ ビジネス","⭐⭐ 中級","⭐⭐⭐ 高級","🏖️ リゾート"],en:["🏠 Hostel/Guesthouse","⭐ Business","⭐⭐ Mid-range","⭐⭐⭐ Luxury","🏖️ Resort"],zh:["🏠 青旅/客栈","⭐ 商务","⭐⭐ 中档","⭐⭐⭐ 豪华","🏖️ 度假村"],ko:["🏠 게스트하우스","⭐ 비즈니스","⭐⭐ 중급","⭐⭐⭐ 고급","🏖️ 리조트"],es:["🏠 Hostal","⭐ Negocio","⭐⭐ Medio","⭐⭐⭐ Lujo","🏖️ Resort"],pt:["🏠 Hostel","⭐ Negócios","⭐⭐ Médio","⭐⭐⭐ Luxo","🏖️ Resort"]},
   shopping:{ja:["👕 衣料","💄 コスメ","🛒 スーパー","🎁 おみやげ","💻 家電"],en:["👕 Clothing","💄 Cosmetics","🛒 Grocery","🎁 Souvenirs","💻 Electronics"],zh:["👕 服装","💄 化妆品","🛒 超市","🎁 纪念品","💻 电子产品"],ko:["👕 의류","💄 화장품","🛒 마트","🎁 기념품","💻 전자기기"],es:["👕 Ropa","💄 Cosméticos","🛒 Supermercado","🎁 Souvenirs","💻 Electrónica"],pt:["👕 Roupas","💄 Cosméticos","🛒 Supermercado","🎁 Souvenirs","💻 Eletrônicos"]},
   activity:{ja:["🏛️ 観光入場","🤿 アクティビティ","💆 マッサージ","🎭 エンタメ","🚌 ツアー"],en:["🏛️ Attraction entry","🤿 Activities","💆 Massage/Spa","🎭 Entertainment","🚌 Tour"],zh:["🏛️ 景点门票","🤿 活动体验","💆 按摩·SPA","🎭 娱乐演出","🚌 旅游团"],ko:["🏛️ 관광지 입장","🤿 액티비티","💆 마사지·스파","🎭 엔터테인먼트","🚌 투어"],es:["🏛️ Entrada","🤿 Actividades","💆 Masaje/Spa","🎭 Entretenimiento","🚌 Tour"],pt:["🏛️ Entrada","🤿 Atividades","💆 Massagem/Spa","🎭 Entretenimento","🚌 Tour"]},
-  famous:{
-    東京:{
-      ja:["🍣 寿司（高級）","🍣 寿司（回転）","🍜 ラーメン","🍤 天ぷら","🥩 すき焼き","🥞 もんじゃ焼き","🍱 鰻重","🐡 ふぐコース","🐭 ディズニー","🗼 展望タワー","🎨 デジタルアート","🐠 水族館","🐼 動物園","🥋 大相撲観戦","👘 着物レンタル","🍡 屋形船","🧙 ハリポタツアー","🎬 ジブリ美術館"],
-      en:["🍣 Sushi (Premium)","🍣 Sushi (Conveyor)","🍜 Ramen","🍤 Tempura","🥩 Sukiyaki","🥞 Monjayaki","🍱 Unagi","🐡 Fugu Course","🐭 Disney","🗼 Observation Tower","🎨 Digital Art","🐠 Aquarium","🐼 Zoo","🥋 Sumo Match","👘 Kimono Rental","🍡 Yakatabune","🧙 Harry Potter Tour","🎬 Ghibli Museum"],
-      zh:["🍣 寿司（高级）","🍣 回转寿司","🍜 拉面","🍤 天妇罗","🥩 寿喜烧","🥞 文字烧","🍱 鳗鱼饭","🐡 河豚套餐","🐭 迪士尼","🗼 观景塔","🎨 数字艺术","🐠 水族馆","🐼 动物园","🥋 相扑观战","👘 和服租借","🍡 屋形船","🧙 哈利波特之旅","🎬 吉卜力美术馆"],
-      ko:["🍣 스시 (고급)","🍣 회전스시","🍜 라멘","🍤 텐푸라","🥩 스키야키","🥞 몬자야키","🍱 장어덮밥","🐡 복어코스","🐭 디즈니","🗼 전망타워","🎨 디지털아트","🐠 수족관","🐼 동물원","🥋 스모관전","👘 기모노대여","🍡 야카타부네","🧙 해리포터투어","🎬 지브리미술관"],
-      es:["🍣 Sushi (Premium)","🍣 Sushi giratorio","🍜 Ramen","🍤 Tempura","🥩 Sukiyaki","🥞 Monjayaki","🍱 Unagi","🐡 Curso Fugu","🐭 Disney","🗼 Mirador","🎨 Arte digital","🐠 Acuario","🐼 Zoológico","🥋 Sumo","👘 Kimono","🍡 Yakatabune","🧙 Harry Potter","🎬 Museo Ghibli"],
-      pt:["🍣 Sushi (Premium)","🍣 Sushi giratório","🍜 Ramen","🍤 Tempura","🥩 Sukiyaki","🥞 Monjayaki","🍱 Unagi","🐡 Curso Fugu","🐭 Disney","🗼 Mirante","🎨 Arte digital","🐠 Aquário","🐼 Zoológico","🥋 Sumô","👘 Kimono","🍡 Yakatabune","🧙 Harry Potter","🎬 Museu Ghibli"]
-    },
-    京都:{
-      ja:["⛩️ 清水寺","🏯 金閣寺","🏯 銀閣寺","🦊 伏見稲荷","🏰 二条城","🚞 嵯峨野トロッコ","🚣 保津川下り","🚂 鉄道博物館","🎬 太秦映画村","🍱 京懐石","🍲 湯豆腐","🍵 抹茶パフェ","🍜 京都ラーメン","🍜 にしんそば","🥟 京湯葉料理","👘 着物レンタル","🍵 茶道体験","💃 舞妓体験"],
-      en:["⛩️ Kiyomizu-dera","🏯 Kinkaku-ji","🏯 Ginkaku-ji","🦊 Fushimi Inari","🏰 Nijo Castle","🚞 Sagano Train","🚣 Hozugawa Boat","🚂 Railway Museum","🎬 Uzumasa Studio","🍱 Kaiseki","🍲 Yudofu","🍵 Matcha Parfait","🍜 Kyoto Ramen","🍜 Nishin Soba","🥟 Yuba Cuisine","👘 Kimono Rental","🍵 Tea Ceremony","💃 Maiko Experience"],
-      zh:["⛩️ 清水寺","🏯 金阁寺","🏯 银阁寺","🦊 伏见稻荷","🏰 二条城","🚞 嵯峨野小火车","🚣 保津川下り","🚂 铁道博物馆","🎬 太秦映画村","🍱 京怀石","🍲 汤豆腐","🍵 抹茶芭菲","🍜 京都拉面","🍜 鲱鱼荞麦面","🥟 京湯葉","👘 和服租借","🍵 茶道体验","💃 舞伎体验"],
-      ko:["⛩️ 기요미즈데라","🏯 킨카쿠지","🏯 긴카쿠지","🦊 후시미이나리","🏰 니조성","🚞 사가노 토롯코","🚣 호즈가와 뱃놀이","🚂 철도박물관","🎬 우즈마사 영화촌","🍱 가이세키","🍲 유도후","🍵 말차파르페","🍜 교토라멘","🍜 니신소바","🥟 유바요리","👘 기모노대여","🍵 다도체험","💃 마이코체험"],
-      es:["⛩️ Kiyomizu-dera","🏯 Kinkaku-ji","🏯 Ginkaku-ji","🦊 Fushimi Inari","🏰 Castillo Nijo","🚞 Tren Sagano","🚣 Río Hozugawa","🚂 Museo Ferroviario","🎬 Uzumasa","🍱 Kaiseki","🍲 Yudofu","🍵 Parfait matcha","🍜 Ramen Kioto","🍜 Nishin Soba","🥟 Yuba","👘 Kimono","🍵 Té Ceremonia","💃 Maiko"],
-      pt:["⛩️ Kiyomizu-dera","🏯 Kinkaku-ji","🏯 Ginkaku-ji","🦊 Fushimi Inari","🏰 Castelo Nijo","🚞 Trem Sagano","🚣 Rio Hozugawa","🚂 Museu Ferroviário","🎬 Uzumasa","🍱 Kaiseki","🍲 Yudofu","🍵 Parfait matcha","🍜 Ramen Kyoto","🍜 Nishin Soba","🥟 Yuba","👘 Kimono","🍵 Cerimônia chá","💃 Maiko"]
-    },
-    大阪:{
-      ja:["🎢 USJ","🏯 大阪城","🐠 海遊館","🗼 通天閣","🏢 あべのハルカス","🌉 空中庭園","🚢 御座船","🐙 たこ焼き","🥞 お好み焼き","🍢 串カツ","🐡 てっちり","🍜 肉吸い","🍣 大阪寿司","🍱 かすうどん","🥟 551豚まん","🎭 なんば花月","🎡 観覧車","🚤 リバークルーズ"],
-      en:["🎢 USJ","🏯 Osaka Castle","🐠 Kaiyukan","🗼 Tsutenkaku","🏢 Abeno Harukas","🌉 Sky Building","🚢 Gozabune","🐙 Takoyaki","🥞 Okonomiyaki","🍢 Kushikatsu","🐡 Tecchiri","🍜 Niku-sui","🍣 Osaka Sushi","🍱 Kasu Udon","🥟 551 Pork Bun","🎭 Namba Hanagekijo","🎡 Ferris Wheel","🚤 River Cruise"],
-      zh:["🎢 环球影城","🏯 大阪城","🐠 海游馆","🗼 通天阁","🏢 阿倍野HARUKAS","🌉 梅田蓝天大厦","🚢 御座船","🐙 章鱼烧","🥞 大阪烧","🍢 炸串","🐡 河豚火锅","🍜 肉吸","🍣 大阪寿司","🍱 大阪乌冬","🥟 551猪肉包","🎭 难波花月","🎡 摩天轮","🚤 道顿堀游船"],
-      ko:["🎢 유니버설 스튜디오","🏯 오사카성","🐠 카이유칸","🗼 츠텐카쿠","🏢 아베노 하루카스","🌉 우메다 스카이","🚢 고자부네","🐙 타코야키","🥞 오코노미야키","🍢 쿠시카츠","🐡 텟치리","🍜 니쿠스이","🍣 오사카초밥","🍱 카스우동","🥟 551 호라이","🎭 난바 하나게키죠","🎡 관람차","🚤 리버크루즈"],
-      es:["🎢 USJ","🏯 Castillo Osaka","🐠 Kaiyukan","🗼 Tsutenkaku","🏢 Abeno Harukas","🌉 Sky Building","🚢 Gozabune","🐙 Takoyaki","🥞 Okonomiyaki","🍢 Kushikatsu","🐡 Tecchiri","🍜 Niku-sui","🍣 Sushi Osaka","🍱 Kasu Udon","🥟 551 Bollo","🎭 Namba Hanagekijo","🎡 Noria","🚤 Crucero"],
-      pt:["🎢 USJ","🏯 Castelo Osaka","🐠 Kaiyukan","🗼 Tsutenkaku","🏢 Abeno Harukas","🌉 Sky Building","🚢 Gozabune","🐙 Takoyaki","🥞 Okonomiyaki","🍢 Kushikatsu","🐡 Tecchiri","🍜 Niku-sui","🍣 Sushi Osaka","🍱 Kasu Udon","🥟 551 Bolinho","🎭 Namba Hanagekijo","🎡 Roda-gigante","🚤 Cruzeiro"]
-    },
-    札幌・北海道:{
-      ja:["🕰️ 札幌時計台","🗼 さっぽろテレビ塔","⛷️ 大倉山リフト","🏅 オリンピックミュージアム","🍪 白い恋人パーク","🚠 もいわ山ロープウェイ","🐑 羊ヶ丘展望台","🍺 サッポロビール博物館","🏢 JRタワーT38","🐻 円山動物園","🍜 札幌味噌ラーメン","🐑 ジンギスカン","🍛 スープカレー","🍗 ザンギ","🍣 海鮮丼","🍣 回転寿司","🦀 カニ料理","🌃 すすきの夜景"],
-      en:["🕰️ Clock Tower","🗼 TV Tower","⛷️ Okurayama Lift","🏅 Olympic Museum","🍪 Shiroi Koibito Park","🚠 Mt.Moiwa Ropeway","🐑 Hitsujigaoka","🍺 Sapporo Beer Museum","🏢 JR Tower T38","🐻 Maruyama Zoo","🍜 Miso Ramen","🐑 Jingisukan","🍛 Soup Curry","🍗 Zangi","🍣 Seafood Bowl","🍣 Conveyor Sushi","🦀 Crab Cuisine","🌃 Susukino Night"],
-      zh:["🕰️ 札幌时计台","🗼 札幌电视塔","⛷️ 大仓山缆车","🏅 奥运博物馆","🍪 白色恋人公园","🚠 藻岩山缆车","🐑 羊之丘展望台","🍺 札幌啤酒博物馆","🏢 JR塔T38","🐻 圆山动物园","🍜 味噌拉面","🐑 成吉思汗烤肉","🍛 汤咖喱","🍗 炸鸡","🍣 海鲜丼","🍣 回转寿司","🦀 螃蟹料理","🌃 薄野夜景"],
-      ko:["🕰️ 삿포로 시계탑","🗼 삿포로 TV타워","⛷️ 오쿠라야마 리프트","🏅 올림픽 박물관","🍪 시로이코이비토 파크","🚠 모이와산 로프웨이","🐑 히츠지가오카","🍺 삿포로 맥주박물관","🏢 JR타워 T38","🐻 마루야마 동물원","🍜 미소라멘","🐑 징기스칸","🍛 수프카레","🍗 잔기","🍣 해물덮밥","🍣 회전초밥","🦀 게요리","🌃 스스키노 야경"],
-      es:["🕰️ Torre Reloj","🗼 Torre TV Sapporo","⛷️ Telesilla Okurayama","🏅 Museo Olímpico","🍪 Parque Shiroi Koibito","🚠 Teleférico Moiwa","🐑 Hitsujigaoka","🍺 Museo Cerveza Sapporo","🏢 JR Tower T38","🐻 Zoo Maruyama","🍜 Ramen Miso","🐑 Jingisukan","🍛 Sopa Curry","🍗 Zangi","🍣 Tazón mariscos","🍣 Sushi giratorio","🦀 Cangrejo","🌃 Susukino Noche"],
-      pt:["🕰️ Torre Relógio","🗼 Torre TV Sapporo","⛷️ Telesqui Okurayama","🏅 Museu Olímpico","🍪 Parque Shiroi Koibito","🚠 Teleférico Moiwa","🐑 Hitsujigaoka","🍺 Museu Cerveja Sapporo","🏢 JR Tower T38","🐻 Zoo Maruyama","🍜 Ramen Missô","🐑 Jingisukan","🍛 Sopa Curry","🍗 Zangi","🍣 Tigela frutos do mar","🍣 Sushi giratório","🦀 Caranguejo","🌃 Susukino Noite"]
-    },
-    仙台:{
-      ja:["🏯 仙台城跡","🏛️ 青葉城資料展示館","⛩️ 瑞鳳殿","🐠 うみの杜水族館","🚢 松島観光船","⛵ 松島〜塩釜定期航路","⛩️ 大崎八幡宮","🎨 仙台メディアテーク","🏛️ 仙台市博物館","💧 秋保大滝","🐂 牛タン定食(ランチ)","🐂 牛タン定食(標準)","🐂 牛タン定食(特上)","🌿 ずんだ餅","🥤 ずんだシェイク","🐟 笹かまぼこ","🌙 萩の月","🍲 せり鍋"],
-      en:["🏯 Sendai Castle Ruins","🏛️ Aoba Castle Museum","⛩️ Zuihoden","🐠 Uminomori Aquarium","🚢 Matsushima Cruise","⛵ Matsushima-Shiogama","⛩️ Osaki Hachimangu","🎨 Mediatheque","🏛️ City Museum","💧 Akiu Falls","🐂 Gyutan Lunch","🐂 Gyutan Standard","🐂 Gyutan Premium","🌿 Zunda Mochi","🥤 Zunda Shake","🐟 Sasa Kamaboko","🌙 Hagi no Tsuki","🍲 Seri Nabe"],
-      zh:["🏯 仙台城迹","🏛️ 青叶城资料展示馆","⛩️ 瑞凤殿","🐠 仙台海洋森林水族馆","🚢 松岛观光船","⛵ 松岛塩釜航线","⛩️ 大崎八幡宫","🎨 仙台媒体中心","🏛️ 仙台市博物馆","💧 秋保大瀑布","🐂 牛舌定食(午餐)","🐂 牛舌定食(标准)","🐂 牛舌定食(特级)","🌿 毛豆麻糬","🥤 毛豆奶昔","🐟 笹叶鱼板","🌙 萩之月","🍲 鸭儿芹火锅"],
-      ko:["🏯 센다이성터","🏛️ 아오바조 자료전시관","⛩️ 즈이호덴","🐠 우미노모리 수족관","🚢 마츠시마 관광선","⛵ 마츠시마-시오가마","⛩️ 오사키 하치만구","🎨 센다이 미디어테크","🏛️ 시립박물관","💧 아키우 폭포","🐂 규탄정식(런치)","🐂 규탄정식(표준)","🐂 규탄정식(특상)","🌿 즌다모치","🥤 즌다 셰이크","🐟 사사카마보코","🌙 하기노츠키","🍲 세리나베"],
-      es:["🏯 Ruinas Castillo Sendai","🏛️ Museo Aoba","⛩️ Zuihoden","🐠 Acuario Uminomori","🚢 Crucero Matsushima","⛵ Matsushima-Shiogama","⛩️ Osaki Hachimangu","🎨 Mediateca","🏛️ Museo Ciudad","💧 Cataratas Akiu","🐂 Gyutan(Almuerzo)","🐂 Gyutan(Estándar)","🐂 Gyutan(Premium)","🌿 Zunda Mochi","🥤 Zunda Shake","🐟 Sasa Kamaboko","🌙 Hagi no Tsuki","🍲 Seri Nabe"],
-      pt:["🏯 Ruínas Castelo Sendai","🏛️ Museu Aoba","⛩️ Zuihoden","🐠 Aquário Uminomori","🚢 Cruzeiro Matsushima","⛵ Matsushima-Shiogama","⛩️ Osaki Hachimangu","🎨 Mediateca","🏛️ Museu Cidade","💧 Cataratas Akiu","🐂 Gyutan(Almoço)","🐂 Gyutan(Padrão)","🐂 Gyutan(Premium)","🌿 Zunda Mochi","🥤 Zunda Shake","🐟 Sasa Kamaboko","🌙 Hagi no Tsuki","🍲 Seri Nabe"]
-    },
-    横浜:{
-      ja:["🏢 ランドマークタワー展望台","🎡 コスモクロック21","🏮 横浜中華街","🧱 赤レンガ倉庫","🍜 カップヌードルミュージアム","🐬 八景島シーパラ ワンデーパス","🐠 八景島アクアリゾーツパス","🗼 横浜マリンタワー","🚠 ヨコハマエアキャビン往復","🍜 新横浜ラーメン博物館","🥟 中華街・本格中華","🥡 中華街・食べ歩き","🍜 サンマーメン","🍜 家系ラーメン","🫖 中華街飲茶","🍰 ありあけハーバー","🍱 崎陽軒シウマイ弁当","🚢 クルーズディナー"],
-      en:["🏢 Landmark Tower","🎡 Cosmo Clock 21","🏮 Yokohama Chinatown","🧱 Red Brick Warehouse","🍜 Cup Noodles Museum","🐬 Hakkeijima 1-Day Pass","🐠 Hakkeijima Aqua Pass","🗼 Marine Tower","🚠 Air Cabin Round","🍜 Ramen Museum","🥟 Chinatown Course","🥡 Chinatown Street","🍜 Sanma-men","🍜 Iekei Ramen","🫖 Chinatown Yum Cha","🍰 Ariake Harbour","🍱 Kiyoken Shumai Bento","🚢 Cruise Dinner"],
-      zh:["🏢 地标塔展望台","🎡 大观览车21","🏮 横滨中华街","🧱 红砖仓库","🍜 杯面博物馆","🐬 八景岛一日通票","🐠 八景岛水族馆通票","🗼 横滨海洋塔","🚠 空中缆车往返","🍜 新横滨拉面博物馆","🥟 中华街正宗中餐","🥡 中华街小吃","🍜 三马面","🍜 家系拉面","🫖 中华街饮茶","🍰 有明港湾","🍱 崎阳轩烧麦便当","🚢 游船晚餐"],
-      ko:["🏢 랜드마크 타워","🎡 코스모 클락 21","🏮 요코하마 차이나타운","🧱 붉은벽돌창고","🍜 컵누들 박물관","🐬 핫케이지마 1일권","🐠 핫케이지마 아쿠아권","🗼 마린타워","🚠 에어 캐빈 왕복","🍜 라멘 박물관","🥟 차이나타운 정통","🥡 차이나타운 길거리","🍜 산마멘","🍜 이에케이 라멘","🫖 차이나타운 얌차","🍰 아리아케 하버","🍱 키요켄 슈마이","🚢 크루즈 디너"],
-      es:["🏢 Landmark Tower","🎡 Cosmo Clock 21","🏮 Chinatown Yokohama","🧱 Almacén Ladrillo","🍜 Museo Cup Noodles","🐬 Hakkeijima 1-Día","🐠 Hakkeijima Acuario","🗼 Marine Tower","🚠 Air Cabin","🍜 Museo Ramen","🥟 Chinatown Curso","🥡 Chinatown Calle","🍜 Sanma-men","🍜 Ramen Iekei","🫖 Yum Cha","🍰 Ariake Harbour","🍱 Bento Shumai","🚢 Crucero Cena"],
-      pt:["🏢 Landmark Tower","🎡 Cosmo Clock 21","🏮 Chinatown Yokohama","🧱 Armazém Tijolo","🍜 Museu Cup Noodles","🐬 Hakkeijima 1-Dia","🐠 Hakkeijima Aquário","🗼 Marine Tower","🚠 Air Cabin","🍜 Museu Ramen","🥟 Chinatown Curso","🥡 Chinatown Rua","🍜 Sanma-men","🍜 Ramen Iekei","🫖 Yum Cha","🍰 Ariake Harbour","🍱 Bento Shumai","🚢 Cruzeiro Jantar"]
-    },
-    名古屋:{
-      ja:["🏯 名古屋城","🐼 東山動植物園","🐠 名古屋港水族館","🧱 レゴランド","🚄 リニア・鉄道館","🔬 名古屋市科学館","⛩️ 熱田神宮","🏺 ノリタケの森","🚗 トヨタ産業技術記念館","🗼 名古屋テレビ塔","🍱 ひつまぶし","🥩 味噌カツ","🍲 味噌煮込みうどん","🍗 手羽先","🍝 きしめん","🍝 あんかけスパゲッティ","🍜 台湾ラーメン","🐔 名古屋コーチン"],
-      en:["🏯 Nagoya Castle","🐼 Higashiyama Zoo","🐠 Nagoya Aquarium","🧱 LEGOLAND","🚄 SCMaglev & Railway","🔬 Science Museum","⛩️ Atsuta Shrine","🏺 Noritake Garden","🚗 Toyota Museum","🗼 TV Tower","🍱 Hitsumabushi","🥩 Misokatsu","🍲 Miso Nikomi","🍗 Tebasaki","🍝 Kishimen","🍝 Ankake Pasta","🍜 Taiwan Ramen","🐔 Nagoya Cochin"],
-      zh:["🏯 名古屋城","🐼 东山动植物园","🐠 名古屋港水族馆","🧱 乐高乐园","🚄 磁悬浮铁道馆","🔬 名古屋科学馆","⛩️ 热田神宫","🏺 则武之森","🚗 丰田产业技术馆","🗼 名古屋电视塔","🍱 鳗鱼三吃饭","🥩 味噌炸猪排","🍲 味噌煮乌冬","🍗 鸡翅膀","🍝 棊子面","🍝 勾芡意面","🍜 台湾拉面","🐔 名古屋土鸡"],
-      ko:["🏯 나고야성","🐼 히가시야마 동식물원","🐠 나고야항 수족관","🧱 레고랜드","🚄 리니어 철도관","🔬 과학관","⛩️ 아츠타 신궁","🏺 노리타케 숲","🚗 토요타 산업기술관","🗼 나고야 TV타워","🍱 히츠마부시","🥩 미소카츠","🍲 미소니코미 우동","🍗 테바사키","🍝 키시멘","🍝 안카케 파스타","🍜 타이완 라멘","🐔 나고야 코친"],
-      es:["🏯 Castillo Nagoya","🐼 Zoo Higashiyama","🐠 Acuario Puerto","🧱 LEGOLAND","🚄 Museo Maglev","🔬 Museo Ciencia","⛩️ Santuario Atsuta","🏺 Jardín Noritake","🚗 Museo Toyota","🗼 Torre TV","🍱 Hitsumabushi","🥩 Misokatsu","🍲 Miso Nikomi","🍗 Tebasaki","🍝 Kishimen","🍝 Pasta Ankake","🍜 Ramen Taiwán","🐔 Pollo Cochin"],
-      pt:["🏯 Castelo Nagoya","🐼 Zoo Higashiyama","🐠 Aquário Porto","🧱 LEGOLAND","🚄 Museu Maglev","🔬 Museu Ciência","⛩️ Santuário Atsuta","🏺 Jardim Noritake","🚗 Museu Toyota","🗼 Torre TV","🍱 Hitsumabushi","🥩 Misokatsu","🍲 Miso Nikomi","🍗 Tebasaki","🍝 Kishimen","🍝 Massa Ankake","🍜 Ramen Taiwan","🐔 Frango Cochin"]
-    },
-    神戸:{
-      ja:["🗼 神戸ポートタワー","🏠 北野異人館 7館パス","🏘️ 北野異人館 単館","🐼 神戸どうぶつ王国","🐑 六甲山牧場","🚠 六甲山ロープウェー","🌊 メリケンパーク","🛍️ ハーバーランド","🌿 神戸布引ハーブ園","🏮 南京町（中華街）","🥩 神戸牛ステーキ(ランチ)","🥩 神戸牛ステーキ(ディナー)","🍔 神戸牛ハンバーグ","🍴 神戸牛食べ放題","🍳 そばめし","🐙 明石焼き","🍮 神戸プリン","🥘 ぼっかけ"],
-      en:["🗼 Port Tower","🏠 Ijinkan 7-Pass","🏘️ Ijinkan Single","🐼 Animal Kingdom","🐑 Rokko Pasture","🚠 Rokko Ropeway","🌊 Meriken Park","🛍️ Harborland","🌿 Nunobiki Herb Garden","🏮 Nankinmachi","🥩 Kobe Beef Lunch","🥩 Kobe Beef Dinner","🍔 Kobe Beef Burger","🍴 Kobe Beef Buffet","🍳 Sobameshi","🐙 Akashiyaki","🍮 Kobe Pudding","🥘 Bokkake"],
-      zh:["🗼 神户港塔","🏠 北野异人馆7馆通票","🏘️ 北野异人馆单馆","🐼 神户动物王国","🐑 六甲山牧场","🚠 六甲山缆车","🌊 美利坚公园","🛍️ 海港乐园","🌿 神户布引香草园","🏮 南京町","🥩 神户牛排(午餐)","🥩 神户牛排(晚餐)","🍔 神户牛汉堡","🍴 神户牛吃到饱","🍳 荞麦饭","🐙 明石烧","🍮 神户布丁","🥘 牛筋蒟蒻"],
-      ko:["🗼 고베 포트타워","🏠 기타노 이진칸 7관","🏘️ 기타노 이진칸 단관","🐼 고베 동물왕국","🐑 록코산 목장","🚠 록코산 로프웨이","🌊 메리켄 파크","🛍️ 하버랜드","🌿 누노비키 허브가든","🏮 난킨마치","🥩 고베규 스테이크(런치)","🥩 고베규 스테이크(디너)","🍔 고베규 함박","🍴 고베규 뷔페","🍳 소바메시","🐙 아카시야키","🍮 고베 푸딩","🥘 봇카케"],
-      es:["🗼 Torre Puerto","🏠 Ijinkan 7","🏘️ Ijinkan Solo","🐼 Animal Kingdom","🐑 Rokko Pasture","🚠 Rokko Cable","🌊 Meriken Park","🛍️ Harborland","🌿 Nunobiki Hierbas","🏮 Nankinmachi","🥩 Kobe Almuerzo","🥩 Kobe Cena","🍔 Kobe Burger","🍴 Kobe Buffet","🍳 Sobameshi","🐙 Akashiyaki","🍮 Pudín Kobe","🥘 Bokkake"],
-      pt:["🗼 Torre Porto","🏠 Ijinkan 7","🏘️ Ijinkan Solo","🐼 Animal Kingdom","🐑 Rokko Pasto","🚠 Rokko Cabo","🌊 Meriken Park","🛍️ Harborland","🌿 Nunobiki Ervas","🏮 Nankinmachi","🥩 Kobe Almoço","🥩 Kobe Jantar","🍔 Kobe Burger","🍴 Kobe Buffet","🍳 Sobameshi","🐙 Akashiyaki","🍮 Pudim Kobe","🥘 Bokkake"]
-    },
-    広島:{
-      ja:["🕊️ 平和記念資料館","🏛️ 原爆ドーム","⛩️ 厳島神社 昇殿料","🎁 厳島神社+宝物館","🏯 千畳閣","🚠 宮島ロープウェイ往復","⛴️ 宮島フェリー片道","🏯 広島城","🚢 大和ミュージアム","🚠 千光寺山ロープウェイ往復","🥞 広島風お好み焼き","🦪 焼き牡蠣","🍱 あなご飯","🍜 広島ラーメン","🌶️ 汁なし担々麺","🍁 もみじ饅頭","🍩 揚げもみじ","🍋 レモン菓子"],
-      en:["🕊️ Peace Memorial Museum","🏛️ Atomic Bomb Dome","⛩️ Itsukushima Shrine","🎁 Itsukushima+Treasure","🏯 Senjokaku Hall","🚠 Miyajima Ropeway","⛴️ Miyajima Ferry","🏯 Hiroshima Castle","🚢 Yamato Museum","🚠 Senkoji Ropeway","🥞 Hiroshima Okonomiyaki","🦪 Grilled Oyster","🍱 Anago-meshi","🍜 Hiroshima Ramen","🌶️ Soupless Tantanmen","🍁 Momiji Manju","🍩 Fried Momiji","🍋 Lemon Sweets"],
-      zh:["🕊️ 和平纪念资料馆","🏛️ 原爆穹顶","⛩️ 严岛神社","🎁 严岛+宝物馆","🏯 千叠阁","🚠 宫岛缆车往返","⛴️ 宫岛轮渡单程","🏯 广岛城","🚢 大和博物馆","🚠 千光寺山缆车","🥞 广岛烧","🦪 烤牡蛎","🍱 鳗鱼饭","🍜 广岛拉面","🌶️ 干汁担担面","🍁 红叶馒头","🍩 炸红叶馒头","🍋 柠檬甜点"],
-      ko:["🕊️ 평화기념자료관","🏛️ 원폭돔","⛩️ 이쓰쿠시마 신사","🎁 이쓰쿠시마+보물관","🏯 센조카쿠","🚠 미야지마 로프웨이","⛴️ 미야지마 페리","🏯 히로시마성","🚢 야마토 박물관","🚠 센코지산 로프웨이","🥞 히로시마 오코노미야키","🦪 구운 굴","🍱 아나고메시","🍜 히로시마 라멘","🌶️ 시루나시 탄탄면","🍁 모미지 만쥬","🍩 튀긴 모미지","🍋 레몬 과자"],
-      es:["🕊️ Museo Memorial Paz","🏛️ Cúpula Bomba","⛩️ Itsukushima","🎁 Itsukushima+Tesoro","🏯 Senjokaku","🚠 Miyajima Cable","⛴️ Ferry Miyajima","🏯 Castillo Hiroshima","🚢 Museo Yamato","🚠 Senkoji Cable","🥞 Okonomiyaki Hiroshima","🦪 Ostra Asada","🍱 Anago-meshi","🍜 Ramen Hiroshima","🌶️ Tantanmen Seco","🍁 Momiji Manju","🍩 Momiji Frito","🍋 Dulces Limón"],
-      pt:["🕊️ Museu Paz","🏛️ Cúpula Bomba","⛩️ Itsukushima","🎁 Itsukushima+Tesouro","🏯 Senjokaku","🚠 Miyajima Cabo","⛴️ Ferry Miyajima","🏯 Castelo Hiroshima","🚢 Museu Yamato","🚠 Senkoji Cabo","🥞 Okonomiyaki Hiroshima","🦪 Ostra Grelhada","🍱 Anago-meshi","🍜 Ramen Hiroshima","🌶️ Tantanmen Seco","🍁 Momiji Manju","🍩 Momiji Frito","🍋 Doces Limão"]
-    },
-    "博多・福岡":{
-      ja:["⛩️ 太宰府天満宮","🗼 福岡タワー","🐠 マリンワールド海の中道","🌳 海の中道海浜公園","🛍️ キャナルシティ博多","🐼 福岡市動物園","⛩️ 櫛田神社","🚉 博多駅","🌸 能古島アイランドパーク","🎨 福岡市美術館","🍜 豚骨ラーメン","🏮 屋台ラーメン","🍲 もつ鍋","🐔 水炊き","🌶️ 明太子","🍱 明太重","🐟 ごまさば","🍢 焼き鳥(とり皮)"],
-      en:["⛩️ Dazaifu Tenmangu","🗼 Fukuoka Tower","🐠 Marine World","🌳 Uminonakamichi Park","🛍️ Canal City","🐼 Fukuoka Zoo","⛩️ Kushida Shrine","🚉 Hakata Station","🌸 Nokonoshima","🎨 Art Museum","🍜 Tonkotsu Ramen","🏮 Yatai Ramen","🍲 Motsunabe","🐔 Mizutaki","🌶️ Mentaiko","🍱 Mentai-ju","🐟 Goma-saba","🍢 Tori-kawa"],
-      zh:["⛩️ 太宰府天满宫","🗼 福冈塔","🐠 海洋世界","🌳 海中道海滨公园","🛍️ 博多运河城","🐼 福冈动物园","⛩️ 栉田神社","🚉 博多车站","🌸 能古岛","🎨 福冈美术馆","🍜 豚骨拉面","🏮 屋台拉面","🍲 内脏锅","🐔 鸡水炊","🌶️ 明太子","🍱 明太重","🐟 芝麻鲭鱼","🍢 烤鸡皮"],
-      ko:["⛩️ 다자이후 텐만구","🗼 후쿠오카 타워","🐠 마린월드","🌳 우미노나카미치","🛍️ 캐널시티","🐼 후쿠오카 동물원","⛩️ 쿠시다 신사","🚉 하카타역","🌸 노코노시마","🎨 후쿠오카 미술관","🍜 돈코츠 라멘","🏮 야타이 라멘","🍲 모츠나베","🐔 미즈타키","🌶️ 명란","🍱 멘타이쥬","🐟 고마사바","🍢 토리카와"],
-      es:["⛩️ Dazaifu Tenmangu","🗼 Torre Fukuoka","🐠 Marine World","🌳 Uminonakamichi","🛍️ Canal City","🐼 Zoo Fukuoka","⛩️ Santuario Kushida","🚉 Estación Hakata","🌸 Nokonoshima","🎨 Museo Arte","🍜 Ramen Tonkotsu","🏮 Yatai Ramen","🍲 Motsunabe","🐔 Mizutaki","🌶️ Mentaiko","🍱 Mentai-ju","🐟 Goma-saba","🍢 Tori-kawa"],
-      pt:["⛩️ Dazaifu Tenmangu","🗼 Torre Fukuoka","🐠 Marine World","🌳 Uminonakamichi","🛍️ Canal City","🐼 Zoo Fukuoka","⛩️ Santuário Kushida","🚉 Estação Hakata","🌸 Nokonoshima","🎨 Museu Arte","🍜 Ramen Tonkotsu","🏮 Yatai Ramen","🍲 Motsunabe","🐔 Mizutaki","🌶️ Mentaiko","🍱 Mentai-ju","🐟 Goma-saba","🍢 Tori-kawa"]
-    },
-    "那覇・沖縄":{
-      ja:["🐋 美ら海水族館","🏯 首里城公園","🛍️ 国際通り","🕳️ おきなわワールド","🕊️ ひめゆりの塔","🌊 万座毛","🗼 古宇利オーシャンタワー","🍍 ナゴパイナップルパーク","🕊️ 沖縄平和祈念堂","🏯 識名園","🍜 沖縄そば","🍳 ゴーヤチャンプルー","🥩 ラフテー","🌿 海ぶどう","🍩 サーターアンダギー","🍪 ちんすこう","🥜 ジーマミ豆腐","🍚 タコライス"],
-      en:["🐋 Churaumi Aquarium","🏯 Shurijo Castle","🛍️ Kokusai Street","🕳️ Okinawa World","🕊️ Himeyuri Monument","🌊 Manzamo","🗼 Kouri Ocean Tower","🍍 Pineapple Park","🕊️ Peace Hall","🏯 Shikinaen","🍜 Okinawa Soba","🍳 Goya Chanpuru","🥩 Rafute","🌿 Umibudo","🍩 Sata Andagi","🍪 Chinsuko","🥜 Jimami Tofu","🍚 Taco Rice"],
-      zh:["🐋 美丽海水族馆","🏯 首里城公园","🛍️ 国际通","🕳️ 冲绳世界","🕊️ 姬百合之塔","🌊 万座毛","🗼 古宇利海洋塔","🍍 凤梨园","🕊️ 和平祈念堂","🏯 识名园","🍜 冲绳荞麦面","🍳 苦瓜杂炒","🥩 红烧三层肉","🌿 海葡萄","🍩 冲绳甜甜圈","🍪 金楚糕","🥜 花生豆腐","🍚 塔可饭"],
-      ko:["🐋 추라우미 수족관","🏯 슈리성 공원","🛍️ 국제거리","🕳️ 오키나와 월드","🕊️ 히메유리의 탑","🌊 만자모","🗼 고우리 오션타워","🍍 파인애플 파크","🕊️ 평화기념당","🏯 시키나엔","🍜 오키나와 소바","🍳 고야 찬푸루","🥩 라후테","🌿 우미부도","🍩 사타안다기","🍪 친스코","🥜 지마미 두부","🍚 타코라이스"],
-      es:["🐋 Acuario Churaumi","🏯 Castillo Shurijo","🛍️ Calle Kokusai","🕳️ Okinawa World","🕊️ Monumento Himeyuri","🌊 Manzamo","🗼 Torre Kouri","🍍 Pineapple Park","🕊️ Sala Paz","🏯 Shikinaen","🍜 Okinawa Soba","🍳 Goya Chanpuru","🥩 Rafute","🌿 Umibudo","🍩 Sata Andagi","🍪 Chinsuko","🥜 Tofu Maní","🍚 Taco Rice"],
-      pt:["🐋 Aquário Churaumi","🏯 Castelo Shurijo","🛍️ Rua Kokusai","🕳️ Okinawa World","🕊️ Monumento Himeyuri","🌊 Manzamo","🗼 Torre Kouri","🍍 Pineapple Park","🕊️ Sala Paz","🏯 Shikinaen","🍜 Okinawa Soba","🍳 Goya Chanpuru","🥩 Rafute","🌿 Umibudo","🍩 Sata Andagi","🍪 Chinsuko","🥜 Tofu Amendoim","🍚 Taco Rice"]
-    },
-    ソウル:{
-      ja:["🏯 景福宮","🗼 Nソウルタワー","🚠 南山ケーブルカー","🎢 ロッテワールド","🏘️ 北村韓屋村","🛍️ 明洞","🎨 仁寺洞","🏛️ DDP","🏯 昌徳宮","🚢 漢江遊覧船","🥩 サムギョプサル","🍚 ビビンバ","🍜 冷麺","🍲 サムゲタン","🌶️ トッポッキ","🍗 韓国チキン","🍙 キンパ","🍱 韓定食コース"],
-      en:["🏯 Gyeongbokgung","🗼 N Seoul Tower","🚠 Namsan Cable Car","🎢 Lotte World","🏘️ Bukchon Hanok","🛍️ Myeongdong","🎨 Insadong","🏛️ DDP","🏯 Changdeokgung","🚢 Hangang Cruise","🥩 Samgyeopsal","🍚 Bibimbap","🍜 Naengmyeon","🍲 Samgyetang","🌶️ Tteokbokki","🍗 Korean Chicken","🍙 Kimbap","🍱 Hanjeongsik"],
-      zh:["🏯 景福宫","🗼 N首尔塔","🚠 南山缆车","🎢 乐天世界","🏘️ 北村韩屋村","🛍️ 明洞","🎨 仁寺洞","🏛️ DDP","🏯 昌德宫","🚢 汉江游船","🥩 三层肉","🍚 拌饭","🍜 冷面","🍲 参鸡汤","🌶️ 辣炒年糕","🍗 韩式炸鸡","🍙 紫菜包饭","🍱 韩定食"],
-      ko:["🏯 경복궁","🗼 N서울타워","🚠 남산케이블카","🎢 롯데월드","🏘️ 북촌한옥마을","🛍️ 명동","🎨 인사동","🏛️ DDP","🏯 창덕궁","🚢 한강유람선","🥩 삼겹살","🍚 비빔밥","🍜 냉면","🍲 삼계탕","🌶️ 떡볶이","🍗 한국치킨","🍙 김밥","🍱 한정식"],
-      es:["🏯 Gyeongbokgung","🗼 N Seoul Tower","🚠 Cable Namsan","🎢 Lotte World","🏘️ Bukchon","🛍️ Myeongdong","🎨 Insadong","🏛️ DDP","🏯 Changdeokgung","🚢 Crucero Hangang","🥩 Samgyeopsal","🍚 Bibimbap","🍜 Naengmyeon","🍲 Samgyetang","🌶️ Tteokbokki","🍗 Pollo Coreano","🍙 Kimbap","🍱 Hanjeongsik"],
-      pt:["🏯 Gyeongbokgung","🗼 N Seoul Tower","🚠 Cabo Namsan","🎢 Lotte World","🏘️ Bukchon","🛍️ Myeongdong","🎨 Insadong","🏛️ DDP","🏯 Changdeokgung","🚢 Cruzeiro Hangang","🥩 Samgyeopsal","🍚 Bibimbap","🍜 Naengmyeon","🍲 Samgyetang","🌶️ Tteokbokki","🍗 Frango Coreano","🍙 Kimbap","🍱 Hanjeongsik"]
-    },
-    仁川:{
-      ja:["✈️ 仁川国際空港","🌊 月尾島","🌳 ソンドセントラルパーク","🏮 チャイナタウン","🏛️ ソンドコンベンシア","🌳 自由公園","🛍️ 新浦国際市場","⚾ Wyverns野球","🎢 月尾テーマパーク","🌉 仁川大橋","🍜 チャジャン麺","🍲 海鮮鍋","🌶️ 新浦ラッポッキ","🦪 月尾島貝焼き","🥖 シナモンパン","🍞 アンパン","🥞 海鮮チヂミ","🍺 生ビール"],
-      en:["✈️ Incheon Airport","🌊 Wolmido Island","🌳 Songdo Central Park","🏮 Chinatown","🏛️ Songdo Convensia","🌳 Jayu Park","🛍️ Sinpo Market","⚾ Wyverns Baseball","🎢 Wolmi Theme Park","🌉 Incheon Bridge","🍜 Jajangmyeon","🍲 Seafood Hotpot","🌶️ Sinpo Rapokki","🦪 Grilled Shellfish","🥖 Cinnamon Bread","🍞 Anpan","🥞 Seafood Pancake","🍺 Draft Beer"],
-      zh:["✈️ 仁川机场","🌊 月尾岛","🌳 松岛中央公园","🏮 仁川中华街","🏛️ 松岛会展中心","🌳 自由公园","🛍️ 新浦市场","⚾ 维伦斯棒球","🎢 月尾主题公园","🌉 仁川大桥","🍜 炸酱面","🍲 海鲜汤","🌶️ 新浦辣炒年糕","🦪 月尾岛烤贝","🥖 肉桂面包","🍞 红豆包","🥞 海鲜煎饼","🍺 生啤酒"],
-      ko:["✈️ 인천공항","🌊 월미도","🌳 송도센트럴파크","🏮 차이나타운","🏛️ 송도컨벤시아","🌳 자유공원","🛍️ 신포국제시장","⚾ 와이번스 야구","🎢 월미테마파크","🌉 인천대교","🍜 짜장면","🍲 해물탕","🌶️ 신포 라볶이","🦪 월미도 조개구이","🥖 시나몬빵","🍞 단팥빵","🥞 해물파전","🍺 생맥주"],
-      es:["✈️ Aeropuerto Incheon","🌊 Isla Wolmido","🌳 Songdo Park","🏮 Chinatown","🏛️ Songdo Convensia","🌳 Parque Jayu","🛍️ Mercado Sinpo","⚾ Béisbol Wyverns","🎢 Parque Wolmi","🌉 Puente Incheon","🍜 Jajangmyeon","🍲 Sopa Mariscos","🌶️ Sinpo Rapokki","🦪 Mariscos a la Plancha","🥖 Pan Canela","🍞 Anpan","🥞 Tortilla Mariscos","🍺 Cerveza"],
-      pt:["✈️ Aeroporto Incheon","🌊 Ilha Wolmido","🌳 Songdo Park","🏮 Chinatown","🏛️ Songdo Convensia","🌳 Parque Jayu","🛍️ Mercado Sinpo","⚾ Beisebol Wyverns","🎢 Parque Wolmi","🌉 Ponte Incheon","🍜 Jajangmyeon","🍲 Sopa Frutos do Mar","🌶️ Sinpo Rapokki","🦪 Conchas Grelhadas","🥖 Pão Canela","🍞 Anpan","🥞 Panqueca Mariscos","🍺 Chopp"]
-    },
-    釜山:{
-      ja:["🏖️ 海雲台ビーチ","🏘️ 甘川文化村","🐟 チャガルチ市場","🏯 海東龍宮寺","🗼 釜山タワー","🚂 ブルーラインパーク","🌊 太宗台","🏖️ 広安里ビーチ","🌳 龍頭山公園","🚠 松島ケーブルカー","🍲 豚クッパ","🍜 ミルミョン","🦐 海鮮鍋","🐟 刺身","🐙 ナクチポックム","🍚 デジクッパ","🦐 エビ焼き","🍹 シッケ"],
-      en:["🏖️ Haeundae Beach","🏘️ Gamcheon Village","🐟 Jagalchi Market","🏯 Haedong Yonggungsa","🗼 Busan Tower","🚂 Blue Line Park","🌊 Taejongdae","🏖️ Gwangalli Beach","🌳 Yongdusan Park","🚠 Songdo Cable Car","🍲 Dwaeji Gukbap","🍜 Milmyeon","🦐 Seafood Hotpot","🐟 Sashimi","🐙 Nakji Bokkeum","🍚 Dwaeji Gukbap","🦐 Grilled Shrimp","🍹 Sikhye"],
-      zh:["🏖️ 海云台海滩","🏘️ 甘川文化村","🐟 札嘎其市场","🏯 海东龙宫寺","🗼 釜山塔","🚂 蓝线公园","🌊 太宗台","🏖️ 广安里海滩","🌳 龙头山公园","🚠 松岛缆车","🍲 猪肉汤饭","🍜 麦面","🦐 海鲜汤","🐟 生鱼片","🐙 辣炒章鱼","🍚 猪肉汤饭","🦐 烤虾","🍹 甜米露"],
-      ko:["🏖️ 해운대해수욕장","🏘️ 감천문화마을","🐟 자갈치시장","🏯 해동용궁사","🗼 부산타워","🚂 블루라인파크","🌊 태종대","🏖️ 광안리해수욕장","🌳 용두산공원","🚠 송도케이블카","🍲 돼지국밥","🍜 밀면","🦐 해물탕","🐟 회","🐙 낙지볶음","🍚 돼지국밥","🦐 새우구이","🍹 식혜"],
-      es:["🏖️ Playa Haeundae","🏘️ Aldea Gamcheon","🐟 Mercado Jagalchi","🏯 Haedong Yonggungsa","🗼 Torre Busan","🚂 Blue Line Park","🌊 Taejongdae","🏖️ Playa Gwangalli","🌳 Parque Yongdusan","🚠 Cable Songdo","🍲 Dwaeji Gukbap","🍜 Milmyeon","🦐 Sopa Mariscos","🐟 Sashimi","🐙 Pulpo Picante","🍚 Dwaeji Gukbap","🦐 Camarón Asado","🍹 Sikhye"],
-      pt:["🏖️ Praia Haeundae","🏘️ Aldeia Gamcheon","🐟 Mercado Jagalchi","🏯 Haedong Yonggungsa","🗼 Torre Busan","🚂 Blue Line Park","🌊 Taejongdae","🏖️ Praia Gwangalli","🌳 Parque Yongdusan","🚠 Cabo Songdo","🍲 Dwaeji Gukbap","🍜 Milmyeon","🦐 Sopa Frutos","🐟 Sashimi","🐙 Polvo Picante","🍚 Dwaeji Gukbap","🦐 Camarão Grelhado","🍹 Sikhye"]
-    },
-    大邱:{
-      ja:["🚠 八公山ロープウェイ","🛍️ 西門市場","🛍️ 東城路","🏛️ 近代文化通り","⛪ 桂山聖堂","🌿 薬令市","🗼 大邱83タワー","🌳 頭流公園","🛍️ 安吉モクチェ通り","🏛️ 青羅言堂","🍖 マクチャンクイ","🍗 平和市場チメッ","🥟 ナプチャクマンドゥ","🥩 テジカルビ","🐐 フクヨムソ","🍱 十大味","🌶️ 辛いカルグクス","🍳 ヤキメシ"],
-      en:["🚠 Palgongsan Cable","🛍️ Seomun Market","🛍️ Dongseong-ro","🏛️ Modern Culture Street","⛪ Gyesan Cathedral","🌿 Yangnyeongsi","🗼 Daegu 83 Tower","🌳 Duryu Park","🛍️ Angil Mokje","🏛️ Cheongna Eondam","🍖 Makchang Gui","🍗 Chimaek Market","🥟 Napjak Mandu","🥩 Daegu Galbi","🐐 Heukyeomso","🍱 Sipdaemi","🌶️ Spicy Kalguksu","🍳 Yaki Meshi"],
-      zh:["🚠 八公山缆车","🛍️ 西门市场","🛍️ 东城路","🏛️ 近代文化街","⛪ 桂山主教座堂","🌿 药令市","🗼 大邱83塔","🌳 头流公园","🛍️ 安吉穆鲁洞","🏛️ 青萝言堂","🍖 烤大肠","🍗 平和市场啤酒炸鸡","🥟 扁平饺子","🥩 大邱排骨","🐐 黑山羊汤","🍱 十大味","🌶️ 辣刀削面","🍳 烧饭"],
-      ko:["🚠 팔공산케이블카","🛍️ 서문시장","🛍️ 동성로","🏛️ 근대문화골목","⛪ 계산성당","🌿 약령시","🗼 대구 83타워","🌳 두류공원","🛍️ 안지목재거리","🏛️ 청라언덕","🍖 막창구이","🍗 평화시장 치맥","🥟 납작만두","🥩 돼지갈비","🐐 흑염소","🍱 십대맛","🌶️ 매운칼국수","🍳 야끼밥"],
-      es:["🚠 Cable Palgongsan","🛍️ Mercado Seomun","🛍️ Dongseong-ro","🏛️ Calle Cultura Moderna","⛪ Catedral Gyesan","🌿 Yangnyeongsi","🗼 Torre Daegu 83","🌳 Parque Duryu","🛍️ Angil Mokje","🏛️ Cheongna","🍖 Makchang Gui","🍗 Chimaek","🥟 Napjak Mandu","🥩 Daegu Galbi","🐐 Cabra Negra","🍱 Sipdaemi","🌶️ Kalguksu Picante","🍳 Yaki Meshi"],
-      pt:["🚠 Cabo Palgongsan","🛍️ Mercado Seomun","🛍️ Dongseong-ro","🏛️ Rua Cultura Moderna","⛪ Catedral Gyesan","🌿 Yangnyeongsi","🗼 Torre Daegu 83","🌳 Parque Duryu","🛍️ Angil Mokje","🏛️ Cheongna","🍖 Makchang Gui","🍗 Chimaek","🥟 Napjak Mandu","🥩 Daegu Galbi","🐐 Cabra Preta","🍱 Sipdaemi","🌶️ Kalguksu Picante","🍳 Yaki Meshi"]
-    },
-    済州島:{
-      ja:["🌋 城山日出峰","🏔️ 漢拏山国立公園","🕳️ 万丈窟","🐄 牛島フェリー","💧 天帝淵瀑布","💧 正房瀑布","🌳 テジボン公園","🪨 龍頭岩","🏘️ ヒーリョンタウン","🏖️ 中文海水浴場","🐖 黒豚焼肉","🍜 テジコギグクス","🍲 アワビ粥","🌊 海女料理","🐟 タチウオ料理","🏄 サーフィン体験","🍡 オメギ餅","🍊 漢拏ボン"],
-      en:["🌋 Seongsan Ilchulbong","🏔️ Hallasan National Park","🕳️ Manjanggul Cave","🐄 Udo Ferry","💧 Cheonjeyeon Falls","💧 Jeongbang Falls","🌳 Daejeobong Park","🪨 Yongduam Rock","🏘️ Heoryong Town","🏖️ Jungmun Beach","🐖 Black Pork BBQ","🍜 Dwaeji Gukbap","🍲 Abalone Porridge","🌊 Haenyeo Cuisine","🐟 Cutlassfish","🏄 Surfing","🍡 Omegi Tteok","🍊 Hallabong"],
-      zh:["🌋 城山日出峰","🏔️ 汉拿山","🕳️ 万丈窟","🐄 牛岛轮渡","💧 天帝渊瀑布","💧 正房瀑布","🌳 大邸峰公园","🪨 龙头岩","🏘️ 海女村","🏖️ 中文海水浴场","🐖 黑猪烤肉","🍜 猪肉汤面","🍲 鲍鱼粥","🌊 海女料理","🐟 带鱼料理","🏄 冲浪体验","🍡 五味子糕","🍊 汉拿峰"],
-      ko:["🌋 성산일출봉","🏔️ 한라산국립공원","🕳️ 만장굴","🐄 우도페리","💧 천제연폭포","💧 정방폭포","🌳 대접봉공원","🪨 용두암","🏘️ 해녀마을","🏖️ 중문해수욕장","🐖 흑돼지구이","🍜 돼지국수","🍲 전복죽","🌊 해녀요리","🐟 갈치요리","🏄 서핑체험","🍡 오메기떡","🍊 한라봉"],
-      es:["🌋 Seongsan Ilchulbong","🏔️ Hallasan","🕳️ Manjanggul","🐄 Ferry Udo","💧 Cataratas Cheonjeyeon","💧 Cataratas Jeongbang","🌳 Parque Daejeobong","🪨 Roca Yongduam","🏘️ Aldea Haenyeo","🏖️ Playa Jungmun","🐖 BBQ Cerdo Negro","🍜 Dwaeji Gukbap","🍲 Abulón Gachas","🌊 Cocina Haenyeo","🐟 Pez Cinto","🏄 Surf","🍡 Omegi Tteok","🍊 Hallabong"],
-      pt:["🌋 Seongsan Ilchulbong","🏔️ Hallasan","🕳️ Manjanggul","🐄 Ferry Udo","💧 Cataratas Cheonjeyeon","💧 Cataratas Jeongbang","🌳 Parque Daejeobong","🪨 Rocha Yongduam","🏘️ Aldeia Haenyeo","🏖️ Praia Jungmun","🐖 BBQ Porco Preto","🍜 Dwaeji Gukbap","🍲 Abulone Mingau","🌊 Culinária Haenyeo","🐟 Peixe Cinto","🏄 Surf","🍡 Omegi Tteok","🍊 Hallabong"]
-    },
-    全州:{
-      ja:["🏘️ 全州韓屋村","🏯 慶基殿","⛪ 殿洞聖堂","🌳 梧木台","🏛️ 寒碧堂","🏛️ 全州郷校","🛍️ 南部市場","🌳 徳津公園","🍶 マッコリ通り","🎨 工芸品展示館","🍚 全州ビビンバ","🍲 コンナムルクッパ","🍶 マッコリ","🍡 伝統菓子","🌶️ ピチョリ唐辛子","🍫 PNBチョコパイ","🍙 文化キンパ","🍲 十里堤野菜炒め"],
-      en:["🏘️ Jeonju Hanok Village","🏯 Gyeonggijeon","⛪ Jeondong Cathedral","🌳 Omokdae","🏛️ Hanbyeokdang","🏛️ Jeonju Hyanggyo","🛍️ Nambu Market","🌳 Deokjin Park","🍶 Makgeolli Street","🎨 Craft Center","🍚 Jeonju Bibimbap","🍲 Kongnamul Gukbap","🍶 Makgeolli","🍡 Traditional Sweets","🌶️ Pichori Pepper","🍫 PNB Chocopie","🍙 Munhwa Kimbap","🍲 Sipri Vegetables"],
-      zh:["🏘️ 全州韩屋村","🏯 庆基殿","⛪ 殿洞圣堂","🌳 梧木台","🏛️ 寒碧堂","🏛️ 全州乡校","🛍️ 南部市场","🌳 德津公园","🍶 马格利酒街","🎨 工艺品馆","🍚 全州拌饭","🍲 豆芽汤饭","🍶 马格利酒","🍡 传统糕点","🌶️ 皮焦里辣椒","🍫 PNB巧克力派","🍙 文化紫菜包饭","🍲 十里堤炒菜"],
-      ko:["🏘️ 전주한옥마을","🏯 경기전","⛪ 전동성당","🌳 오목대","🏛️ 한벽당","🏛️ 전주향교","🛍️ 남부시장","🌳 덕진공원","🍶 막걸리골목","🎨 공예품전시관","🍚 전주비빔밥","🍲 콩나물국밥","🍶 막걸리","🍡 전통과자","🌶️ 피초리고추","🍫 PNB초코파이","🍙 문화김밥","🍲 십리제 채소볶음"],
-      es:["🏘️ Jeonju Hanok","🏯 Gyeonggijeon","⛪ Catedral Jeondong","🌳 Omokdae","🏛️ Hanbyeokdang","🏛️ Jeonju Hyanggyo","🛍️ Mercado Nambu","🌳 Parque Deokjin","🍶 Calle Makgeolli","🎨 Centro Artesanía","🍚 Bibimbap Jeonju","🍲 Kongnamul","🍶 Makgeolli","🍡 Dulces","🌶️ Chile Pichori","🍫 PNB Chocopie","🍙 Kimbap","🍲 Sipri Verduras"],
-      pt:["🏘️ Jeonju Hanok","🏯 Gyeonggijeon","⛪ Catedral Jeondong","🌳 Omokdae","🏛️ Hanbyeokdang","🏛️ Jeonju Hyanggyo","🛍️ Mercado Nambu","🌳 Parque Deokjin","🍶 Rua Makgeolli","🎨 Centro Artesanato","🍚 Bibimbap Jeonju","🍲 Kongnamul","🍶 Makgeolli","🍡 Doces","🌶️ Pimenta Pichori","🍫 PNB Chocopie","🍙 Kimbap","🍲 Sipri Vegetais"]
-    },
-    慶州:{
-      ja:["🏯 仏国寺","🗿 石窟庵","🔭 瞻星台","🌊 雁鴨池","⚱️ 大陵苑","🏛️ 慶州歴史地区","🏘️ 良洞民俗村","🏛️ 統一殿","🌳 普門観光団地","🗼 慶州タワー","🍞 皇南パン","🍚 慶州ビビンバ","🌿 サムマンス豆腐料理","🌼 菊花パン","🍶 慶州法酒","🍡 韓菓","🍬 麦芽飴","🍚 ヌルンジ"],
-      en:["🏯 Bulguksa Temple","🗿 Seokguram","🔭 Cheomseongdae","🌊 Anapji Pond","⚱️ Daereungwon","🏛️ Gyeongju Historic Area","🏘️ Yangdong Village","🏛️ Tongiljeon","🌳 Bomun Resort","🗼 Gyeongju Tower","🍞 Hwangnam Bread","🍚 Gyeongju Bibimbap","🌿 Tofu Cuisine","🌼 Gukhwa Bread","🍶 Beopju Liquor","🍡 Hangwa","🍬 Malt Candy","🍚 Nurungji"],
-      zh:["🏯 佛国寺","🗿 石窟庵","🔭 瞻星台","🌊 雁鸭池","⚱️ 大陵苑","🏛️ 庆州历史区","🏘️ 良洞民俗村","🏛️ 统一殿","🌳 普门旅游区","🗼 庆州塔","🍞 皇南面包","🍚 庆州拌饭","🌿 豆腐料理","🌼 菊花面包","🍶 庆州法酒","🍡 韩果","🍬 麦芽糖","🍚 锅巴"],
-      ko:["🏯 불국사","🗿 석굴암","🔭 첨성대","🌊 안압지","⚱️ 대릉원","🏛️ 경주역사유적지구","🏘️ 양동민속마을","🏛️ 통일전","🌳 보문관광단지","🗼 경주타워","🍞 황남빵","🍚 경주비빔밥","🌿 두부요리","🌼 국화빵","🍶 경주법주","🍡 한과","🍬 엿","🍚 누룽지"],
-      es:["🏯 Templo Bulguksa","🗿 Seokguram","🔭 Cheomseongdae","🌊 Estanque Anapji","⚱️ Daereungwon","🏛️ Área Histórica","🏘️ Aldea Yangdong","🏛️ Tongiljeon","🌳 Bomun Resort","🗼 Torre Gyeongju","🍞 Pan Hwangnam","🍚 Bibimbap","🌿 Tofu","🌼 Pan Gukhwa","🍶 Licor Beopju","🍡 Hangwa","🍬 Caramelo Malta","🍚 Nurungji"],
-      pt:["🏯 Templo Bulguksa","🗿 Seokguram","🔭 Cheomseongdae","🌊 Lago Anapji","⚱️ Daereungwon","🏛️ Área Histórica","🏘️ Aldeia Yangdong","🏛️ Tongiljeon","🌳 Bomun Resort","🗼 Torre Gyeongju","🍞 Pão Hwangnam","🍚 Bibimbap","🌿 Tofu","🌼 Pão Gukhwa","🍶 Licor Beopju","🍡 Hangwa","🍬 Caramelo Malte","🍚 Nurungji"]
-    },
-    江陵:{
-      ja:["🏯 鏡浦台","🏖️ 鏡浦海水浴場","🏛️ 烏竹軒","🏛️ 船橋荘","🚂 正東津","☕ 安木カフェ通り","🛍️ 江陵中央市場","⚓ 注文津港","🌳 テリョン渓谷","🏔️ 束草秀峰丘","🥡 チョダン豆腐","🌭 オジンオスンデ","🌭 太岩ホットドッグ","🍜 ハマグリカルグクス","🌿 紅参","🦪 東海生牡蠣","🍲 ウィ吐豆腐定食","🍢 端午祭オデン"],
-      en:["🏯 Gyeongpodae","🏖️ Gyeongpo Beach","🏛️ Ojukheon","🏛️ Seongyojang","🚂 Jeongdongjin","☕ Anmok Cafe Street","🛍️ Gangneung Market","⚓ Jumunjin Port","🌳 Daereong Valley","🏔️ Seoraksubong","🥡 Chodang Tofu","🌭 Ojingeo Sundae","🌭 Tearm Hot Dog","🍜 Clam Kalguksu","🌿 Red Ginseng","🦪 East Sea Oyster","🍲 Wita Tofu Set","🍢 Dano Festival Oden"],
-      zh:["🏯 镜浦台","🏖️ 镜浦海水浴场","🏛️ 乌竹轩","🏛️ 船桥庄","🚂 正东津","☕ 安木咖啡街","🛍️ 江陵中央市场","⚓ 注文津港","🌳 大灵溪谷","🏔️ 束草秀峰丘","🥡 草堂豆腐","🌭 鱿鱼血肠","🌭 太岩热狗","🍜 蛤蜊刀削面","🌿 红参","🦪 东海生蚝","🍲 豆腐定食","🍢 端午节关东煮"],
-      ko:["🏯 경포대","🏖️ 경포해수욕장","🏛️ 오죽헌","🏛️ 선교장","🚂 정동진","☕ 안목카페거리","🛍️ 강릉중앙시장","⚓ 주문진항","🌳 대령계곡","🏔️ 설악수봉","🥡 초당두부","🌭 오징어순대","🌭 태암핫도그","🍜 조개칼국수","🌿 홍삼","🦪 동해 생굴","🍲 두부정식","🍢 단오제 오뎅"],
-      es:["🏯 Gyeongpodae","🏖️ Playa Gyeongpo","🏛️ Ojukheon","🏛️ Seongyojang","🚂 Jeongdongjin","☕ Café Anmok","🛍️ Mercado Gangneung","⚓ Puerto Jumunjin","🌳 Valle Daereong","🏔️ Seoraksubong","🥡 Tofu Chodang","🌭 Ojingeo Sundae","🌭 Hot Dog Tearm","🍜 Kalguksu Almejas","🌿 Ginseng Rojo","🦪 Ostra Mar Este","🍲 Set Tofu","🍢 Oden Dano"],
-      pt:["🏯 Gyeongpodae","🏖️ Praia Gyeongpo","🏛️ Ojukheon","🏛️ Seongyojang","🚂 Jeongdongjin","☕ Café Anmok","🛍️ Mercado Gangneung","⚓ Porto Jumunjin","🌳 Vale Daereong","🏔️ Seoraksubong","🥡 Tofu Chodang","🌭 Ojingeo Sundae","🌭 Hot Dog Tearm","🍜 Kalguksu Mariscos","🌿 Ginseng Vermelho","🦪 Ostra Mar Leste","🍲 Set Tofu","🍢 Oden Dano"]
-    }
-  }
 };
+
+// ─────────────────────────────────────────────────────────
+// PRICE DATABASE (主要4カ国・詳細版)
 // ─────────────────────────────────────────────────────────
 const PRICE_DB = {
   日本:{
@@ -1527,392 +1297,6 @@ const PRICE_DB = {
       "💆 マッサージ":{min:3000,avg:7000,max:25000,trend:"+5%",reason:"マッサージ3000〜8000円/時間。温泉500〜3000円。"},
       "🎭 エンタメ":{min:1500,avg:9000,max:35000,trend:"+8%",reason:"歌舞伎2000〜20000円。コンサート6000〜18000円。"},
       "🚌 ツアー":{min:4000,avg:12000,max:60000,trend:"+10%",reason:"日帰りバスツアー4000〜18000円。"},
-    },
-    famous:{
-      東京:{
-        "🍣 寿司（高級）":{min:6000,avg:20000,max:80000,trend:"+10%",reason:"銀座おまかせディナー20000〜40000円。最高級店40000〜80000円以上。ランチ6000〜10000円。"},
-        "🍣 寿司（回転）":{min:500,avg:1800,max:5000,trend:"+8%",reason:"スシロー・くら寿司は税込120円皿〜。1人500〜3000円が標準。"},
-        "🍜 ラーメン":{min:800,avg:1200,max:2500,trend:"+12%",reason:"標準店800〜1200円。高級店1500〜2500円。全国平均729円（2026年1月）。"},
-        "🍤 天ぷら":{min:3000,avg:15000,max:30000,trend:"+8%",reason:"高級店ディナー15000〜30000円。ランチ3000〜8000円。パレスホテル巽22000円。"},
-        "🥩 すき焼き":{min:10000,avg:18000,max:26000,trend:"+10%",reason:"中級10000〜15000円（人形町今半など）。松阪・米沢牛21000〜26000円（日山等）。"},
-        "🥞 もんじゃ焼き":{min:1500,avg:2500,max:3500,trend:"+8%",reason:"月島もんじゃ。1人1500〜3500円。コース料理は2500円〜。"},
-        "🍱 鰻重":{min:3000,avg:5500,max:10000,trend:"+15%",reason:"鰻重3000〜10000円。老舗高級店は8000円以上。鰻価格高騰中。"},
-        "🐡 ふぐコース":{min:15000,avg:25000,max:40000,trend:"+8%",reason:"ふぐコース15000〜40000円。最高級店は40000円以上。"},
-        "🐭 ディズニー":{min:7900,avg:9400,max:10900,trend:"+5%",reason:"東京ディズニーランド/シー 1デーパスポート7900〜10900円（6段階変動価格制）。"},
-        "🗼 展望タワー":{min:1500,avg:2700,max:4800,trend:"+10%",reason:"東京タワーメインデッキ1500円。スカイツリー天望デッキ1800〜3600円。セット券3000〜4800円。渋谷スカイ2700〜3700円。"},
-        "🎨 デジタルアート":{min:3800,avg:4000,max:4200,trend:"+5%",reason:"teamLab Planets TOKYO：平日3800円、休日4200円。中高生2800円。"},
-        "🐠 水族館":{min:2400,avg:2700,max:3000,trend:"+8%",reason:"すみだ水族館2700円（2026.2.10改定）。サンシャイン水族館2600〜3000円。"},
-        "🐼 動物園":{min:600,avg:600,max:600,trend:"±0%",reason:"上野動物園：一般600円、65歳以上300円、中学生200円、小学生以下無料。"},
-        "🥋 大相撲観戦":{min:3500,avg:9000,max:15000,trend:"+5%",reason:"両国国技館：イスC席3500〜4000円、イスA席8000〜8500円、マスC席8500〜9500円、マスS席14000〜15000円。"},
-        "👘 着物レンタル":{min:2000,avg:4000,max:11000,trend:"+8%",reason:"標準プラン3000〜5000円。カップル8000円。メンズ5000円。振袖9000〜11000円。"},
-        "🍡 屋形船":{min:6000,avg:12000,max:25000,trend:"+10%",reason:"乗合ディナー10000〜25000円（食事飲み物込）。ランチ6000〜10000円。"},
-        "🧙 ハリポタツアー":{min:6300,avg:6650,max:7000,trend:"+5%",reason:"ワーナーブラザース スタジオツアー東京：大人6300〜7000円（2026.1.17改定、時期で変動）。中人5200〜5800円。"},
-        "🎬 ジブリ美術館":{min:1000,avg:1000,max:1000,trend:"±0%",reason:"三鷹の森ジブリ美術館：大人1000円、高校・中学700円、小学生400円、幼児（4歳〜）100円。完全予約制。"},
-      },
-      京都:{
-        "⛩️ 清水寺":{min:500,avg:500,max:500,trend:"±0%",reason:"清水寺拝観料：大人500円、小中学生200円（2024年4月改定）。現金のみ。世界遺産。"},
-        "🏯 金閣寺":{min:500,avg:500,max:500,trend:"±0%",reason:"鹿苑寺（金閣寺）：高校生以上500円、小中学生300円。世界遺産。"},
-        "🏯 銀閣寺":{min:500,avg:500,max:500,trend:"±0%",reason:"慈照寺（銀閣寺）：高校生以上500円、小中学生300円（2026年4月改定予定）。世界遺産。"},
-        "🦊 伏見稲荷":{min:0,avg:0,max:0,trend:"±0%",reason:"伏見稲荷大社：参拝料無料。24時間参拝可能。千本鳥居が有名。"},
-        "🏰 二条城":{min:800,avg:1300,max:2300,trend:"+5%",reason:"入城料800円。入城+二の丸御殿1300円。本丸御殿（要予約）+1000円。世界遺産。"},
-        "🚞 嵯峨野トロッコ":{min:880,avg:880,max:880,trend:"+5%",reason:"嵯峨野観光鉄道：大人880円、子供440円。嵐山〜亀岡を約25分。要事前予約推奨。"},
-        "🚣 保津川下り":{min:6000,avg:6000,max:6000,trend:"+10%",reason:"保津川下り：大人6000円、子供4500円（2024年3月改定）。亀岡〜嵐山約16km・約90分の舟下り。"},
-        "🚂 鉄道博物館":{min:1500,avg:1500,max:1500,trend:"+5%",reason:"京都鉄道博物館：一般1500円、大学・高校生1300円、中小学生500円、幼児200円。SLスチーム号別途。"},
-        "🎬 太秦映画村":{min:2000,avg:2800,max:2800,trend:"+15%",reason:"太秦映画村1DAY：大人2800円、子供1600円。ナイトタイム2000円。2026年3月リニューアル後の新料金。"},
-        "🍱 京懐石":{min:4500,avg:10000,max:30000,trend:"+10%",reason:"昼コース4500〜11000円。ディナーコース10000〜30000円。ミシュラン店は15000〜30000円以上。"},
-        "🍲 湯豆腐":{min:1250,avg:3500,max:6000,trend:"+8%",reason:"嵐山・南禅寺名物。とようけ茶屋1250円〜。観光地の専門店3000〜6000円。コース料理は4000円〜。"},
-        "🍵 抹茶パフェ":{min:1265,avg:1500,max:3000,trend:"+10%",reason:"茶寮都路里：都路里パフェ1474円、特選1694円、白玉1265円。祇園本店限定「建都の極」3000円。"},
-        "🍜 京都ラーメン":{min:800,avg:1100,max:1500,trend:"+12%",reason:"第一旭・新福菜館など。背脂醤油系800〜1200円。京都駅周辺は1500円程度の店も。"},
-        "🍜 にしんそば":{min:1200,avg:1500,max:2000,trend:"+8%",reason:"祇園・南座近くの松葉本店など。京都の老舗そばの代表メニュー。1200〜2000円。"},
-        "🥟 京湯葉料理":{min:3000,avg:4500,max:7000,trend:"+8%",reason:"湯葉づくしコース。嵐山・南禅寺周辺の専門店。ランチ3000〜5000円、ディナー5000〜7000円。"},
-        "👘 着物レンタル":{min:3000,avg:5000,max:8000,trend:"+8%",reason:"標準プラン3080〜7700円。ヘアセット込み4000〜6000円。カップル8000円前後。夢館・梨花和服など。"},
-        "🍵 茶道体験":{min:3000,avg:4500,max:6000,trend:"+5%",reason:"茶道体験：3000〜6000円。着物レンタル併設プランも。京町家での本格体験は5000円〜。"},
-        "💃 舞妓体験":{min:10000,avg:18000,max:25000,trend:"+8%",reason:"舞妓変身→撮影→散策プラン。スタジオ撮影のみ10000〜15000円。屋外散策付き18000〜25000円。"},
-      },
-      大阪:{
-        "🎢 USJ":{min:8600,avg:10000,max:11900,trend:"+5%",reason:"USJ 1デイ・スタジオ・パス：大人8600〜11900円（変動価格制）、子供5600〜7400円。3歳以下無料。"},
-        "🏯 大阪城":{min:1200,avg:1200,max:1200,trend:"+100%",reason:"大阪城天守閣（豊臣石垣館込）：大人1200円（2025年4月値上げ）、大学・高校生600円、中学生以下無料。"},
-        "🐠 海遊館":{min:2400,avg:2700,max:3200,trend:"+8%",reason:"海遊館：大人2400〜3200円（4段階変動価格制）、シニア2200円、子供1400円、幼児700円。ジンベエザメで有名。"},
-        "🗼 通天閣":{min:1500,avg:1500,max:1500,trend:"+25%",reason:"通天閣（一般+特別屋外展望台セット）：大人1500円、子供800円（2026年4月一本化）。ビリケンさん。"},
-        "🏢 あべのハルカス":{min:2000,avg:2000,max:2000,trend:"+5%",reason:"ハルカス300：大人2000円、中高生1200円、小学生700円、幼児500円（4歳以上）。日本一高いビル300m。"},
-        "🌉 空中庭園":{min:2000,avg:2000,max:2000,trend:"+5%",reason:"梅田スカイビル空中庭園展望台：大人2000円、4歳〜小学生500円。地上173m360度のパノラマ。"},
-        "🚢 御座船":{min:1500,avg:1500,max:1500,trend:"+5%",reason:"大阪城御座船：大阪城お堀めぐり。大人1500円程度。黄金色の豪華船。約20分。"},
-        "🐙 たこ焼き":{min:300,avg:600,max:1200,trend:"+10%",reason:"屋台6個300〜480円、8個400〜640円。店内10個600〜800円。道頓堀の人気店は1000〜1200円。"},
-        "🥞 お好み焼き":{min:800,avg:1300,max:1800,trend:"+8%",reason:"豚玉800〜1200円。ミックス・海鮮入り1200〜1800円。鶴橋風月・千房など。"},
-        "🍢 串カツ":{min:120,avg:200,max:300,trend:"+8%",reason:"1本120〜300円。だるま等の老舗。コース10本1500〜2500円。新世界・難波が有名。"},
-        "🐡 てっちり":{min:10000,avg:15000,max:25000,trend:"+8%",reason:"ふぐ鍋コース10000〜25000円。大阪はふぐ消費量日本一。づぼらや跡や老舗専門店。"},
-        "🍜 肉吸い":{min:800,avg:1000,max:1200,trend:"+10%",reason:"千とせ（千日前）の名物。肉うどんから麺を抜いた料理。800〜1200円。"},
-        "🍣 大阪寿司":{min:1500,avg:2000,max:3000,trend:"+8%",reason:"押し寿司・バッテラ・箱寿司。1500〜3000円。吉野鯗・湖月など老舗。"},
-        "🍱 かすうどん":{min:800,avg:1000,max:1200,trend:"+8%",reason:"大阪南部発祥。牛もつの揚げカスが入ったうどん。800〜1200円。「加寿屋」など。"},
-        "🥟 551豚まん":{min:210,avg:240,max:500,trend:"+10%",reason:"551蓬莱の豚まん：1個210円〜。2個セット約500円。大阪土産の定番。蓬莱以外の店もあり。"},
-        "🎭 なんば花月":{min:4800,avg:5000,max:5300,trend:"+5%",reason:"なんばグランド花月（吉本新喜劇）：1階指定席5300円、2階指定席4800円。学生・シニア割引あり。"},
-        "🎡 観覧車":{min:600,avg:900,max:1000,trend:"+5%",reason:"道頓堀大観覧車（えびすタワー）600円。天保山大観覧車900円。HEPファイブ観覧車600円。"},
-        "🚤 リバークルーズ":{min:900,avg:1200,max:1500,trend:"+8%",reason:"とんぼりリバークルーズ：大人1200円、子供600円。道頓堀川約20分の遊覧船。"},
-      },
-      札幌・北海道:{
-        "🕰️ 札幌時計台":{min:350,avg:350,max:350,trend:"+75%",reason:"札幌市時計台：大人350円（2025年4月値上げ、旧200円）、大学生150円、高校生以下無料。国指定重要文化財。"},
-        "🗼 さっぽろテレビ塔":{min:1200,avg:1200,max:1200,trend:"+5%",reason:"さっぽろテレビ塔展望台：大人1200円、高校生1000円、中学生600円、小学生400円、幼児100円。地上90mからのパノラマ。"},
-        "⛷️ 大倉山リフト":{min:500,avg:1000,max:1000,trend:"±0%",reason:"大倉山ジャンプ競技場展望台リフト：往復大人1000円、小学生以下500円。片道大人500円。1972年札幌オリンピック会場。"},
-        "🏅 オリンピックミュージアム":{min:670,avg:670,max:670,trend:"+5%",reason:"札幌オリンピックミュージアム：大人670円、中学生以下無料、65歳以上500円。大倉山リフトとのセット券1370円。"},
-        "🍪 白い恋人パーク":{min:800,avg:800,max:800,trend:"+33%",reason:"白い恋人パーク有料エリア：大人800円（旧600円から値上げ）、4歳〜中学生400円、3歳以下無料。チョコレートテーマパーク。"},
-        "🚠 もいわ山ロープウェイ":{min:1400,avg:2100,max:2100,trend:"+8%",reason:"札幌もいわ山ロープウェイ＋ミニケーブルカー往復：大人2100円、小人1050円。ロープウェイのみ往復1400円。日本新三大夜景。"},
-        "🐑 羊ヶ丘展望台":{min:600,avg:600,max:600,trend:"±0%",reason:"さっぽろ羊ヶ丘展望台：大人600円、小中学生300円。札幌市民800円（年パス）。クラーク博士像で有名。"},
-        "🍺 サッポロビール博物館":{min:0,avg:1000,max:1000,trend:"±0%",reason:"自由見学は無料。プレミアムツアー1000円（ビール2杯試飲付き、約50分、要事前予約）。日本唯一のビール博物館。"},
-        "🏢 JRタワーT38":{min:740,avg:740,max:740,trend:"+5%",reason:"JRタワー展望室T38：大人740円、中高生520円、小学生・4歳以上320円、3歳以下無料。地上160mから360度のパノラマ。"},
-        "🐻 円山動物園":{min:800,avg:800,max:800,trend:"+33%",reason:"札幌市円山動物園：大人800円（旧600円から値上げ）、高校生400円、中学生以下無料。約160種700点の動物。"},
-        "🍜 札幌味噌ラーメン":{min:840,avg:1100,max:1500,trend:"+10%",reason:"札幌味噌ラーメン：840〜1500円。すみれ・白樺山荘・純連・彩未など名店多数。中太ちぢれ麺と濃厚味噌スープが特徴。"},
-        "🐑 ジンギスカン":{min:1500,avg:2000,max:2500,trend:"+8%",reason:"ジンギスカン：1500〜2500円/人。だるま本店・松尾・サッポロビール園など。ラム肉を専用鍋で焼く北海道名物。"},
-        "🍛 スープカレー":{min:1290,avg:1380,max:1800,trend:"+10%",reason:"スープカレー：1290〜1800円。GARAKU・マジックスパイス・RAMAI・スープカリーイエローなど名店多数。札幌発祥。"},
-        "🍗 ザンギ":{min:800,avg:1000,max:1200,trend:"+8%",reason:"ザンギ定食：800〜1200円。中国料理布袋など。北海道風唐揚げで醤油ベースの濃いめ味付け。"},
-        "🍣 海鮮丼":{min:1500,avg:2200,max:3000,trend:"+10%",reason:"海鮮丼：1500〜3000円。二条市場・場外市場・札幌中央卸売市場が有名。ウニ・イクラ・カニなど。"},
-        "🍣 回転寿司":{min:1500,avg:2200,max:3000,trend:"+8%",reason:"回転寿司：1500〜3000円/人。根室花まる・トリトン・なごやか亭が人気。北海道産ネタが充実。"},
-        "🦀 カニ料理":{min:3000,avg:8000,max:20000,trend:"+10%",reason:"カニ料理：3000〜20000円。札幌かに本家・かに将軍など。タラバ・ズワイ・毛ガニのコースが定番。"},
-        "🌃 すすきの夜景":{min:0,avg:0,max:0,trend:"±0%",reason:"すすきの・ニッカ看板：見学無料。日本三大歓楽街の一つ。約3500軒の飲食店。撮影スポット。"},
-      },
-      仙台:{
-        "🏯 仙台城跡":{min:0,avg:0,max:0,trend:"±0%",reason:"仙台城跡（青葉城）：見学無料。伊達政宗公騎馬像が有名。標高130mから仙台市街と太平洋を一望。国の史跡。"},
-        "🏛️ 青葉城資料展示館":{min:700,avg:700,max:700,trend:"+5%",reason:"青葉城資料展示館：大人700円、中高生600円、小学生450円。CG映像「謹製仙台城」とVRゴーが好評。クーポンで500円。"},
-        "⛩️ 瑞鳳殿":{min:570,avg:570,max:570,trend:"+5%",reason:"瑞鳳殿：一般・大学生570円、高校生410円、小中学生210円。伊達政宗公霊屋。桃山様式の豪華絢爛な廟建築。"},
-        "🐠 うみの杜水族館":{min:2400,avg:2400,max:2400,trend:"+8%",reason:"仙台うみの杜水族館：大人2400円、中高生1700円、小学生1200円、幼児700円（4歳以上）、3歳以下無料。シニア1800円。"},
-        "🚢 松島観光船":{min:1500,avg:1500,max:1500,trend:"+5%",reason:"松島島巡り観光船「仁王丸コース」：大人1500円、子供750円。約50分の松島湾遊覧。日本三景・松島の絶景を満喫。"},
-        "⛵ 松島〜塩釜定期航路":{min:2900,avg:2900,max:2900,trend:"+5%",reason:"芭蕉コース（丸文松島汽船）：大人2900円、小学生1450円。松島〜塩釜間を結ぶ定期遊覧船。"},
-        "⛩️ 大崎八幡宮":{min:0,avg:0,max:0,trend:"±0%",reason:"大崎八幡宮：参拝無料。伊達政宗公が創建した国宝建築。安土桃山時代の優美な権現造り。どんと祭で有名。"},
-        "🎨 仙台メディアテーク":{min:0,avg:0,max:0,trend:"±0%",reason:"せんだいメディアテーク：入館・図書館利用無料。伊東豊雄設計の現代建築。ギャラリーは企画展により有料の場合あり。"},
-        "🏛️ 仙台市博物館":{min:460,avg:460,max:460,trend:"+5%",reason:"仙台市博物館：一般460円、高大生230円、小中学生110円。伊達家寄贈品約11000件を含む歴史資料。常設展。"},
-        "💧 秋保大滝":{min:0,avg:0,max:0,trend:"±0%",reason:"秋保大滝：見学無料。落差55m・幅6mの大瀑布。日本三大瀑布の一つ。国指定名勝。秋保温泉とセットで観光。"},
-        "🐂 牛タン定食(ランチ)":{min:1320,avg:1700,max:2000,trend:"+8%",reason:"牛タン定食ランチ：1320〜2000円。たんや善治郎の駅前本店・別館の平日限定「丸たん得々定食」1320円が地元志向。"},
-        "🐂 牛タン定食(標準)":{min:2000,avg:2300,max:2500,trend:"+10%",reason:"牛タン定食標準：2000〜2500円。利久・喜助・たんや善治郎など主要店の通常メニュー。麦飯・テールスープ付き。"},
-        "🐂 牛タン定食(特上)":{min:3355,avg:4000,max:4675,trend:"+8%",reason:"特上・厚切り牛タン定食：3355〜4675円。利久西口本店の各2枚4切3355円〜、各3枚6切4675円。喜助の特切り厚焼。"},
-        "🌿 ずんだ餅":{min:500,avg:750,max:1000,trend:"+8%",reason:"ずんだ餅：500〜1000円。ずんだ茶寮・村上屋餅店など。枝豆をすり潰した甘い緑色の餡。"},
-        "🥤 ずんだシェイク":{min:500,avg:550,max:660,trend:"+10%",reason:"ずんだシェイク：500〜660円。ずんだ茶寮の元祖ずんだシェイクが有名。仙台駅で人気の名物ドリンク。"},
-        "🐟 笹かまぼこ":{min:200,avg:300,max:500,trend:"+5%",reason:"笹かまぼこ：1枚200〜500円。鐘崎・阿部の笹かまぼこ・松澤蒲鉾店・佐々直など。伊達家家紋の笹の葉型。"},
-        "🌙 萩の月":{min:200,avg:250,max:300,trend:"+8%",reason:"萩の月：1個約200円（簡易包装197円〜、化粧箱204円〜）。6個入1500円、8個入2000円、10個入2500円。菓匠三全の代表銘菓。"},
-        "🍲 せり鍋":{min:1500,avg:2200,max:3000,trend:"+8%",reason:"せり鍋・伊達鶏料理：1500〜3000円。仙台名産のせり（根まで食べる）と伊達鶏を使った郷土料理。冬の名物。"},
-      },
-      横浜:{
-        "🏢 ランドマークタワー展望台":{min:1000,avg:1000,max:1000,trend:"±0%",reason:"横浜ランドマークタワー69階スカイガーデン：大人1000円、高校生・65歳以上800円、小中500円、幼児200円。2026年1月〜2028年まで大規模修繕で営業休止中。"},
-        "🎡 コスモクロック21":{min:900,avg:900,max:900,trend:"±0%",reason:"よこはまコスモワールドの大観覧車：1回900円（3歳以上）。1周約15分。全高112.5m。世界最大の時計機能付き観覧車。"},
-        "🏮 横浜中華街":{min:0,avg:0,max:0,trend:"±0%",reason:"横浜中華街：散策無料。600軒以上の中華料理店が軒を連ねる日本最大の中華街。広東・北京・上海・四川料理。"},
-        "🧱 赤レンガ倉庫":{min:0,avg:0,max:0,trend:"±0%",reason:"横浜赤レンガ倉庫：入館無料。1号館は文化施設、2号館は商業施設。明治・大正期の歴史的建造物。イベント多数。"},
-        "🍜 カップヌードルミュージアム":{min:500,avg:500,max:500,trend:"±0%",reason:"カップヌードルミュージアム横浜：大人500円、高校生以下無料、未就学児無料。マイカップヌードルファクトリー別途500円。"},
-        "🐬 八景島シーパラ ワンデーパス":{min:2400,avg:5700,max:5700,trend:"+5%",reason:"横浜・八景島シーパラダイス ワンデーパス：大人・高校生5700円、シニア・小中4100円、幼児2400円。4水族館+アトラクション乗り放題。"},
-        "🐠 八景島アクアリゾーツパス":{min:3500,avg:3500,max:3500,trend:"+5%",reason:"アクアリゾーツパス（4水族館）：大人3500円。シーパラの4つの水族館巡り。アトラクションなし。"},
-        "🗼 横浜マリンタワー":{min:1000,avg:1200,max:1400,trend:"+10%",reason:"横浜マリンタワー：平日デイ大人1000円、土日祝1200円、ナイト平日1200円・土日祝1400円。地上106mから360度パノラマ。"},
-        "🚠 ヨコハマエアキャビン往復":{min:1000,avg:1800,max:1800,trend:"+5%",reason:"YOKOHAMA AIR CABIN：往復大人1800円（小人900円）、片道大人1000円（小人500円）。桜木町〜運河パーク約5分の都市型ロープウェイ。"},
-        "🍜 新横浜ラーメン博物館":{min:450,avg:450,max:450,trend:"+45%",reason:"新横浜ラーメン博物館：大人450円、小中学生100円、シニア100円、高校生（学生証提示）100円、小学生未満無料。"},
-        "🥟 中華街・本格中華":{min:2000,avg:4000,max:6000,trend:"+8%",reason:"横浜中華街の本格中華コース：2000〜6000円。聘珍樓・萬珍樓など老舗。広東料理を中心に北京・上海・四川料理。"},
-        "🥡 中華街・食べ歩き":{min:300,avg:500,max:800,trend:"+10%",reason:"中華街食べ歩き：1品300〜800円。小籠包・肉まん・ゴマ団子・北京ダックなど。大通り沿いに屋台多数。"},
-        "🍜 サンマーメン":{min:800,avg:1000,max:1200,trend:"+10%",reason:"サンマーメン：800〜1200円。横浜発祥のあんかけ麺。もやし・キャベツ等の野菜あんかけ。"},
-        "🍜 家系ラーメン":{min:900,avg:1100,max:1500,trend:"+10%",reason:"家系ラーメン：900〜1500円。横浜発祥の豚骨醤油+太麺。吉村家・六角家など。"},
-        "🫖 中華街飲茶":{min:3000,avg:4500,max:6000,trend:"+8%",reason:"中華街飲茶コース：3000〜6000円。ランチ飲茶コース3000円〜。小籠包・点心食べ放題プランも。"},
-        "🍰 ありあけハーバー":{min:200,avg:250,max:300,trend:"+8%",reason:"ありあけ横濱ハーバー：1個約200〜300円。横浜銘菓のマロンカステラ。横浜土産の定番。"},
-        "🍱 崎陽軒シウマイ弁当":{min:950,avg:950,max:950,trend:"+5%",reason:"崎陽軒シウマイ弁当：950円。横浜駅・崎陽軒のロングセラー駅弁。1日約2万食販売の人気。"},
-        "🚢 クルーズディナー":{min:6000,avg:10000,max:15000,trend:"+10%",reason:"横浜港クルーズディナー：6000〜15000円。マリーンルージュ・ロイヤルウイング・シーバスなど。夜景と食事を楽しむ。"},
-      },
-      名古屋:{
-        "🏯 名古屋城":{min:500,avg:500,max:500,trend:"±0%",reason:"名古屋城：大人500円、中学生以下無料。2026年10月から1000円に値上げ予定（32年ぶり）。本丸・二の丸など4エリア。天守閣は閉鎖中。"},
-        "🐼 東山動植物園":{min:500,avg:500,max:500,trend:"±0%",reason:"東山動植物園：大人500円、中学生以下無料。2026年10月から800円に値上げ予定。約450種の動物と7000種の植物。コアラで有名。"},
-        "🐠 名古屋港水族館":{min:2030,avg:2030,max:2030,trend:"+5%",reason:"名古屋港水族館：大人・高校生2030円、小中1010円、幼児（4歳以上）500円。シャチ・ベルーガが見られる。イルカパフォーマンス充実。"},
-        "🧱 レゴランド":{min:4500,avg:6000,max:7400,trend:"+5%",reason:"レゴランドジャパン1DAYパスポート：大人4500〜7400円（6段階変動価格制）、子供3300〜4800円。3歳以下無料。当日窓口は+500円。"},
-        "🚄 リニア・鉄道館":{min:1200,avg:1200,max:1200,trend:"+5%",reason:"JR東海リニア・鉄道館：大人1200円、小中高500円、幼児（3歳以上）200円。新幹線・在来線・リニア実物車両展示。"},
-        "🔬 名古屋市科学館":{min:800,avg:800,max:800,trend:"±0%",reason:"名古屋市科学館（展示室+プラネタリウム）：一般800円、高校生・大学生500円、小中学生無料。2026年10月から1000円に値上げ予定。"},
-        "⛩️ 熱田神宮":{min:0,avg:0,max:0,trend:"±0%",reason:"熱田神宮：参拝無料。三種の神器の一つ「草薙剣」を祀る格式高い神社。約1900年の歴史。"},
-        "🏺 ノリタケの森":{min:0,avg:0,max:0,trend:"±0%",reason:"ノリタケの森：入園無料。クラフトセンター・ミュージアム入場500円。陶磁器メーカーノリタケの企業ミュージアム。"},
-        "🚗 トヨタ産業技術記念館":{min:500,avg:500,max:500,trend:"±0%",reason:"トヨタ産業技術記念館：大人500円、中高生300円、小学生200円。トヨタグループ発祥の地に建つ産業遺産。"},
-        "🗼 名古屋テレビ塔":{min:1300,avg:1300,max:1300,trend:"+8%",reason:"中部電力 MIRAI TOWER（名古屋テレビ塔）：大人1300円、小中600円。地上90mのスカイバルコニー。日本初の集約電波塔。"},
-        "🍱 ひつまぶし":{min:4950,avg:5000,max:6500,trend:"+15%",reason:"ひつまぶし：あつた蓬莱軒で4950円（神宮店）。3通りの食べ方（そのまま・薬味・出汁茶漬け）。鰻価格高騰で値上がり中。"},
-        "🥩 味噌カツ":{min:1500,avg:2000,max:2500,trend:"+10%",reason:"味噌カツ：1500〜2500円。矢場とん（わらじとんかつ・ロースとんかつ定食）。八丁味噌ベースの濃厚タレ。"},
-        "🍲 味噌煮込みうどん":{min:1200,avg:1500,max:1800,trend:"+8%",reason:"味噌煮込みうどん：1200〜1800円。山本屋本店・山本屋総本家など。土鍋で煮込む濃厚味噌の固麺うどん。"},
-        "🍗 手羽先":{min:600,avg:700,max:800,trend:"+8%",reason:"手羽先（世界の山ちゃん・風来坊）：5本600〜800円。10本1100〜1400円。スパイシーな名古屋名物。"},
-        "🍝 きしめん":{min:800,avg:1100,max:1500,trend:"+8%",reason:"きしめん：800〜1500円。住よし・宮きしめんなど。平打ち麺の郷土料理。"},
-        "🍝 あんかけスパゲッティ":{min:900,avg:1200,max:1500,trend:"+8%",reason:"あんかけスパゲッティ：900〜1500円。ヨコイ・スパ屋ピカイチ・からめ亭など。胡椒の効いた中華風あんかけパスタ。"},
-        "🍜 台湾ラーメン":{min:800,avg:950,max:1200,trend:"+10%",reason:"台湾ラーメン：800〜1200円。味仙が発祥。激辛ミンチ肉とニラがのった担仔麺アレンジ。"},
-        "🐔 名古屋コーチン":{min:3000,avg:5000,max:8000,trend:"+10%",reason:"名古屋コーチン料理：3000〜8000円。鳥銀本店・鳥開総本家。日本三大地鶏。コースで親子丼・水炊き・刺身。"},
-      },
-      神戸:{
-        "🗼 神戸ポートタワー":{min:1000,avg:1200,max:1200,trend:"+10%",reason:"神戸ポートタワー：展望フロア+屋上デッキ大人1200円・子供500円、展望のみ大人1000円・子供400円。2024年リニューアル。"},
-        "🏠 北野異人館 7館パス":{min:3000,avg:3000,max:3000,trend:"+5%",reason:"北野異人館プレミアムパス（7館+展望ギャラリー）：3000円。うろこの家・山手八番館・英国館など7館。単館購入より1550円お得。"},
-        "🏘️ 北野異人館 単館":{min:500,avg:750,max:1050,trend:"+5%",reason:"北野異人館単館：500〜1050円。うろこの家1050円、風見鶏の館・萌黄の館700円、坂の上の異人館550円など。"},
-        "🐼 神戸どうぶつ王国":{min:2400,avg:2400,max:2400,trend:"+9%",reason:"神戸どうぶつ王国：大人2400円（2026.4から、旧2200円）、小学生1200円、4-5歳500円、シニア1900円。マヌルネコ・ハシビロコウで有名。"},
-        "🐑 六甲山牧場":{min:500,avg:500,max:500,trend:"±0%",reason:"神戸市立六甲山牧場：大人500円、子供200円。羊・牛・ヤギ・馬とふれあい。チーズ館・羊毛クラフト体験あり。"},
-        "🚠 六甲山ロープウェー":{min:1100,avg:1850,max:1850,trend:"+5%",reason:"六甲有馬ロープウェー：往復大人1850円、片道1100円。表六甲線。六甲山頂と有馬温泉を結ぶ。約12分。"},
-        "🌊 メリケンパーク":{min:0,avg:0,max:0,trend:"±0%",reason:"メリケンパーク：入園無料。BE KOBEモニュメント・神戸海洋博物館がある神戸港の象徴的公園。フォトスポット。"},
-        "🛍️ ハーバーランド":{min:0,avg:0,max:0,trend:"±0%",reason:"神戸ハーバーランド：商業エリア入場無料。umie・映画館・モザイクなど。神戸港の夜景スポット。"},
-        "🌿 神戸布引ハーブ園":{min:1400,avg:2000,max:2000,trend:"+10%",reason:"神戸布引ハーブ園（ロープウェイ往復+入園）：大人2000円、子供1000円。片道大人1400円。新神戸駅から約10分の空中散歩。"},
-        "🏮 南京町（中華街）":{min:0,avg:0,max:0,trend:"±0%",reason:"南京町：散策無料。日本三大中華街の一つ。元町商店街近くにあり、約100軒の中華料理店が並ぶ。"},
-        "🥩 神戸牛ステーキ(ランチ)":{min:3000,avg:5000,max:7000,trend:"+10%",reason:"神戸牛ステーキランチ：3000〜7000円。喜山・八坐和・カワムラなど。ランチセット形式で気軽に味わえる。"},
-        "🥩 神戸牛ステーキ(ディナー)":{min:10000,avg:18000,max:30000,trend:"+12%",reason:"神戸牛ステーキディナー：10000〜30000円。麤皮（ミシュラン2つ星）・モーリヤ・カワムラなど。コース料理。"},
-        "🍔 神戸牛ハンバーグ":{min:2000,avg:2500,max:3000,trend:"+10%",reason:"神戸牛ハンバーグ：2000〜3000円。カワムラ・吉豊など。土鍋ハンバーグやランチプレートで提供。"},
-        "🍴 神戸牛食べ放題":{min:2500,avg:3000,max:4000,trend:"+10%",reason:"神戸牛食べ放題：2500〜4000円。ノーブルウルスの神戸牛ハンバーグランチ食べ放題2500円など。"},
-        "🍳 そばめし":{min:600,avg:750,max:900,trend:"+8%",reason:"そばめし：600〜900円。神戸長田発祥の鉄板料理。焼そばと白ご飯を細かく刻んで一緒に焼いたもの。"},
-        "🐙 明石焼き":{min:600,avg:800,max:1000,trend:"+8%",reason:"明石焼き（玉子焼）：600〜1000円。卵多めのたこ焼き。出汁につけて食べる兵庫県明石の郷土料理。"},
-        "🍮 神戸プリン":{min:300,avg:400,max:500,trend:"+5%",reason:"神戸プリン：300〜500円。トーラク社の代表商品。神戸土産の定番。柑橘系ソース付き。"},
-        "🥘 ぼっかけ":{min:600,avg:900,max:1200,trend:"+8%",reason:"ぼっかけ：600〜1200円。神戸長田名物の牛すじ+こんにゃくの煮込み。うどん・ご飯にかけて食べる。"},
-      },
-      広島:{
-        "🕊️ 平和記念資料館":{min:200,avg:200,max:200,trend:"±0%",reason:"広島平和記念資料館：大人200円、高校生100円、中学生以下無料、65歳以上100円、団体（30名以上）160円。重要文化財。"},
-        "🏛️ 原爆ドーム":{min:0,avg:0,max:0,trend:"±0%",reason:"原爆ドーム：外観のみ見学無料。世界遺産。1945年8月6日の原爆で被災した旧広島県産業奨励館。"},
-        "⛩️ 厳島神社 昇殿料":{min:300,avg:300,max:300,trend:"±0%",reason:"厳島神社昇殿料：大人300円、高校生200円、小中100円。世界遺産。海上に立つ大鳥居が象徴。"},
-        "🎁 厳島神社+宝物館":{min:500,avg:500,max:500,trend:"±0%",reason:"厳島神社+宝物館共通券：大人500円、高校生300円、小中150円。神社単体より100円お得。"},
-        "🏯 千畳閣":{min:100,avg:100,max:100,trend:"±0%",reason:"千畳閣（豊国神社）：大人100円、小中50円。豊臣秀吉建立。畳857枚分の広さの大経堂。"},
-        "🚠 宮島ロープウェイ往復":{min:1100,avg:1800,max:1800,trend:"+5%",reason:"宮島ロープウェー：往復大人1800円、片道1100円。弥山中腹の獅子岩駅まで。瀬戸内海の絶景。"},
-        "⛴️ 宮島フェリー片道":{min:180,avg:180,max:180,trend:"+5%",reason:"宮島フェリー片道：大人180円、小人90円。JR西日本宮島フェリー・宮島松大汽船の2社運航。宮島訪問税含む。"},
-        "🏯 広島城":{min:370,avg:370,max:370,trend:"±0%",reason:"広島城天守閣：大人370円、シニア・高校生180円、中学生以下無料。2025年から耐震工事による長期閉館予定。"},
-        "🚢 大和ミュージアム":{min:500,avg:500,max:500,trend:"±0%",reason:"大和ミュージアム（呉市海事歴史科学館）：一般500円、高校生300円、小中200円、未就学児無料。10分の1戦艦大和模型が圧巻。"},
-        "🚠 千光寺山ロープウェイ往復":{min:500,avg:700,max:700,trend:"+5%",reason:"千光寺山ロープウェイ：往復大人700円、片道500円、子供往復350円・片道250円。尾道の街並みと瀬戸内海を一望。"},
-        "🥞 広島風お好み焼き":{min:1000,avg:1300,max:1800,trend:"+10%",reason:"広島風お好み焼き：1000〜1800円。みっちゃん総本店・八昌・電光石火など名店多数。そば・うどん入り重ね焼き。"},
-        "🦪 焼き牡蠣":{min:500,avg:600,max:800,trend:"+10%",reason:"焼き牡蠣：2個500円〜。宮島の店頭でその場で焼いて販売。生牡蠣1個300円〜。広島県は牡蠣生産日本一。"},
-        "🍱 あなご飯":{min:1800,avg:2200,max:3000,trend:"+12%",reason:"あなご飯：1800〜3000円。宮島名物。うえののあなご飯弁当2160円が有名。香ばしく焼いたあなごをご飯にのせる。"},
-        "🍜 広島ラーメン":{min:800,avg:1000,max:1200,trend:"+10%",reason:"広島ラーメン：800〜1200円。すずめ・我馬・陽気など。豚骨醤油ベースの中華そば。"},
-        "🌶️ 汁なし担々麺":{min:800,avg:1000,max:1200,trend:"+10%",reason:"汁なし担々麺：800〜1200円。キング軒・くにまつ・きさく・武蔵坊など。広島発祥のご当地グルメ。"},
-        "🍁 もみじ饅頭":{min:120,avg:150,max:200,trend:"+5%",reason:"もみじ饅頭：1個120〜200円。にしき堂・藤い屋・やまだ屋など。広島土産の定番。あんこ・クリーム・チーズなど多彩。"},
-        "🍩 揚げもみじ":{min:200,avg:230,max:250,trend:"+5%",reason:"揚げもみじ：1個200〜250円。紅葉堂が元祖。サクサクの揚げ饅頭。あん・クリーム・チーズ味。"},
-        "🍋 レモン菓子":{min:300,avg:500,max:800,trend:"+8%",reason:"瀬戸内レモン菓子：300〜800円。瀬戸内レモンケーキ・レモスコ・レモン羊羹など。広島県生口島がレモン生産日本一。"},
-      },
-      "博多・福岡":{
-        "⛩️ 太宰府天満宮":{min:0,avg:0,max:0,trend:"±0%",reason:"太宰府天満宮：参拝無料。学問の神様・菅原道真を祀る。全国天満宮の総本山。受験合格祈願で有名。"},
-        "🗼 福岡タワー":{min:800,avg:800,max:800,trend:"+10%",reason:"福岡タワー：大人800円、小中500円、4歳〜200円。地上234m。全長海浜タワーで日本一の高さ。"},
-        "🐠 マリンワールド海の中道":{min:2500,avg:2500,max:2500,trend:"+5%",reason:"マリンワールド海の中道：大人2500円、シニア2200円、小中1200円、幼児700円。九州の海をテーマ。350種3万点。"},
-        "🌳 海の中道海浜公園":{min:450,avg:450,max:450,trend:"±0%",reason:"国営海の中道海浜公園：大人450円、中学生以下無料、シニア210円。広大な国営公園。サンシャインプール（夏期）別途。"},
-        "🛍️ キャナルシティ博多":{min:0,avg:0,max:0,trend:"±0%",reason:"キャナルシティ博多：入場無料。商業施設・噴水ショー無料。映画館・劇場・ホテル・ラーメンスタジアム併設。"},
-        "🐼 福岡市動物園":{min:600,avg:600,max:600,trend:"±0%",reason:"福岡市動物園：大人600円、高校生300円、中学生以下無料。福岡市民の憩いの場。植物園と隣接。"},
-        "⛩️ 櫛田神社":{min:0,avg:0,max:0,trend:"±0%",reason:"櫛田神社：参拝無料。博多の総鎮守。博多祇園山笠の起点。境内に飾り山笠あり。"},
-        "🚉 博多駅":{min:0,avg:0,max:0,trend:"±0%",reason:"JR博多駅：入場無料。九州新幹線・在来線の終着駅。JR博多シティ・KITTE博多・博多デイトスで買物グルメ充実。"},
-        "🌸 能古島アイランドパーク":{min:1200,avg:1200,max:1200,trend:"+5%",reason:"のこのしまアイランドパーク：大人1200円、小中600円、幼児400円。フェリー別途（市営¥230片道）。季節の花畑。"},
-        "🎨 福岡市美術館":{min:200,avg:200,max:200,trend:"±0%",reason:"福岡市美術館 常設展：大人200円、高校生150円、中学生以下無料。日本・アジア・現代美術。特別展は別料金。"},
-        "🍜 豚骨ラーメン":{min:900,avg:1050,max:1200,trend:"+12%",reason:"豚骨ラーメン：900〜1200円。一風堂白丸950円・一蘭980円・元祖長浜屋等。博多発祥の細麺・替玉文化。"},
-        "🏮 屋台ラーメン":{min:800,avg:900,max:1000,trend:"+10%",reason:"屋台ラーメン：800〜1000円。中洲・天神・長浜の屋台。豚骨ベース。ビールやおでんも楽しめる。"},
-        "🍲 もつ鍋":{min:2000,avg:2500,max:3000,trend:"+10%",reason:"もつ鍋：1人前2000〜3000円。やまや・笑楽・楽天地・一藤など。醤油・味噌・水炊き風など味付け多彩。"},
-        "🐔 水炊き":{min:3000,avg:4500,max:6000,trend:"+10%",reason:"水炊き：1人前3000〜6000円。華味鳥・橙・とり田など。鶏白湯スープと地鶏。コースで5000円〜。"},
-        "🌶️ 明太子":{min:1500,avg:2200,max:3000,trend:"+10%",reason:"辛子明太子：100gあたり1500〜3000円。ふくや・かねふく・椒房庵など。福岡の代表的お土産。"},
-        "🍱 明太重":{min:1800,avg:1980,max:2200,trend:"+8%",reason:"明太重・めんたい重：1800〜2200円。元祖博多めんたい重1,980円。昆布巻き明太子を一本ご飯にのせる。"},
-        "🐟 ごまさば":{min:900,avg:1200,max:1500,trend:"+10%",reason:"ごまさば：900〜1500円。博多名物の鯖刺身ゴマ醤油和え。定食1990円〜。新鮮な真鯖を使用。"},
-        "🍢 焼き鳥(とり皮)":{min:150,avg:200,max:300,trend:"+8%",reason:"とり皮：1本150〜300円。福岡名物の鶏皮ぐるぐる巻き焼き。秘伝のタレで何度も焼き直す。"},
-      },
-      "那覇・沖縄":{
-        "🐋 美ら海水族館":{min:710,avg:2180,max:2180,trend:"+5%",reason:"沖縄美ら海水族館：大人2180円、高校生1440円、小中710円、6歳未満無料。ジンベエザメ・マンタが見られる「黒潮の海」が圧巻。"},
-        "🏯 首里城公園":{min:400,avg:400,max:400,trend:"±0%",reason:"首里城公園 有料区域：大人400円、高校生300円、小中160円。2019年焼失。現在は復元工事見学エリア。世界遺産。"},
-        "🛍️ 国際通り":{min:0,avg:0,max:0,trend:"±0%",reason:"国際通り：散策無料。那覇のメインストリート約1.6km。お土産店・飲食店・市場が並ぶ。「奇跡の1マイル」と呼ばれる。"},
-        "🕳️ おきなわワールド":{min:2000,avg:2000,max:2000,trend:"+5%",reason:"おきなわワールド・文化王国玉泉洞：大人2000円、小人1000円。日本最大級の鍾乳洞・エイサーショー・伝統工芸体験。"},
-        "🕊️ ひめゆりの塔":{min:450,avg:450,max:450,trend:"±0%",reason:"ひめゆり平和祈念資料館：大人450円、高校生250円、小中150円。沖縄戦の女子学生隊の悲劇を伝える。"},
-        "🌊 万座毛":{min:100,avg:100,max:100,trend:"±0%",reason:"万座毛：駐車場・施設利用料100円程度。象の鼻のような岩と東シナ海の絶景。恩納村の名勝。"},
-        "🗼 古宇利オーシャンタワー":{min:1000,avg:1000,max:1000,trend:"+5%",reason:"古宇利オーシャンタワー：大人1000円、小中500円。古宇利大橋・ハートロックを一望。貝殻ミュージアム併設。"},
-        "🍍 ナゴパイナップルパーク":{min:1200,avg:1500,max:1500,trend:"+25%",reason:"ナゴパイナップルパーク：2025年5月から大人1500円（旧1200円）。パイナップル号で自動運転。試食・お土産充実。"},
-        "🕊️ 沖縄平和祈念堂":{min:450,avg:450,max:450,trend:"±0%",reason:"沖縄平和祈念堂：大人450円、シニア350円。沖縄戦没者を慰霊する施設。摩文仁の丘・平和祈念公園内。"},
-        "🏯 識名園":{min:400,avg:400,max:400,trend:"±0%",reason:"識名園（世界遺産）：大人400円、中学生以下200円。琉球王家の別邸。回遊式庭園。"},
-        "🍜 沖縄そば":{min:700,avg:900,max:1200,trend:"+10%",reason:"沖縄そば（ソーキそば）：700〜1200円。首里そば・沖縄そばじゅん・てぃあんだーなど。豚骨カツオ出汁の小麦麺。"},
-        "🍳 ゴーヤチャンプルー":{min:800,avg:1000,max:1200,trend:"+8%",reason:"ゴーヤチャンプルー定食：800〜1200円。沖縄家庭料理の代表。苦瓜・豆腐・卵・豚肉の炒め物。"},
-        "🥩 ラフテー":{min:800,avg:1200,max:1500,trend:"+10%",reason:"ラフテー：800〜1500円。豚バラの角煮を泡盛・黒糖で煮込む沖縄宮廷料理。定食1200〜2000円。"},
-        "🌿 海ぶどう":{min:600,avg:900,max:1200,trend:"+10%",reason:"海ぶどう：1皿600〜1200円。プチプチした食感の海藻。三杯酢やワサビ醤油で食べる沖縄名物。"},
-        "🍩 サーターアンダギー":{min:80,avg:120,max:150,trend:"+8%",reason:"サーターアンダギー：1個80〜150円。沖縄風揚げドーナツ。プレーン・黒糖・紅芋など味多彩。"},
-        "🍪 ちんすこう":{min:300,avg:500,max:800,trend:"+5%",reason:"ちんすこう：1箱8〜12個入り300〜800円。琉球王朝伝統菓子。沖縄土産の定番。新垣菓子店が老舗。"},
-        "🥜 ジーマミ豆腐":{min:400,avg:500,max:600,trend:"+8%",reason:"ジーマミ豆腐：400〜600円。落花生（ピーナッツ）の絞り汁でつくる沖縄の郷土料理。もちもち食感。"},
-        "🍚 タコライス":{min:800,avg:1000,max:1300,trend:"+10%",reason:"タコライス：800〜1300円。キングタコス（金武町）発祥。米軍文化由来。タコスの具をご飯にのせる。"},
-      },
-    },
-  },
-  韓国:{
-    famous:{
-      ソウル:{
-        "🏯 景福宮":{min:3000,avg:3000,max:3000,trend:"±0%",reason:"景福宮：大人₩3,000、18歳以下・65歳以上無料。朝鮮王朝最大の宮殿。韓服着用なら無料。守門将交代式は1日2回。"},
-        "🗼 Nソウルタワー":{min:21000,avg:21000,max:29000,trend:"+15%",reason:"Nソウルタワー展望台：大人₩21,000、子供・シニア₩16,000。最新公式価格は₩26,000〜₩29,000まで上がっており、変動制で時期によって異なる。"},
-        "🚠 南山ケーブルカー":{min:14000,avg:14000,max:14000,trend:"+5%",reason:"南山ケーブルカー往復：大人₩14,000、子供₩10,500。片道は₩11,500/₩9,000。明洞からNソウルタワーへの最速ルート。"},
-        "🎢 ロッテワールド":{min:46000,avg:62000,max:62000,trend:"+10%",reason:"ロッテワールド1日券：大人₩62,000、中人₩52,000、小人₩46,000。屋内・屋外2エリアの大型遊園地。KKday等で割引あり（₩35,000〜）。"},
-        "🏘️ 北村韓屋村":{min:0,avg:0,max:0,trend:"±0%",reason:"北村韓屋村：散策無料。約900軒の韓屋（伝統家屋）が並ぶ。現在も住民が住んでいるため早朝・夜間は静かに。"},
-        "🛍️ 明洞":{min:0,avg:0,max:0,trend:"±0%",reason:"明洞：散策・ショッピング無料。ソウル一の繁華街。コスメ・グルメ・両替所が集中。屋台多数。"},
-        "🎨 仁寺洞":{min:0,avg:0,max:0,trend:"±0%",reason:"仁寺洞：散策無料。伝統工芸・骨董・伝統茶屋が並ぶ文化通り。お土産にぴったり。"},
-        "🏛️ DDP":{min:0,avg:0,max:0,trend:"±0%",reason:"東大門デザインプラザ（DDP）：入場無料。ザハ・ハディド設計。特別展は別途料金（₩10,000〜₩20,000）。夜のLEDバラ畑が有名。"},
-        "🏯 昌徳宮":{min:3000,avg:3000,max:8000,trend:"+5%",reason:"昌徳宮：大人₩3,000、秘苑見学は別途₩5,000で要事前予約。世界遺産。朝鮮王朝の正宮。"},
-        "🚢 漢江遊覧船":{min:16000,avg:16000,max:25000,trend:"+8%",reason:"漢江遊覧船：基本コース大人₩16,000、ナイト・スペシャルは₩25,000まで。約70分でソウル中心部の景色を楽しめる。"},
-        "🥩 サムギョプサル":{min:9500,avg:12000,max:15000,trend:"+12%",reason:"サムギョプサル1人前（150g）：₩9,500〜₩15,000。観光地（明洞）は割高、弘大・延南洞は₩7,500〜とお得。2人前から注文が基本。"},
-        "🍚 ビビンバ":{min:8000,avg:10000,max:12000,trend:"+10%",reason:"ビビンバ：₩8,000〜₩12,000。石焼ビビンバ・ユッケビビンバは₩12,000〜₩15,000。コネスト等で人気店多数。"},
-        "🍜 冷麺":{min:8000,avg:10000,max:14000,trend:"+10%",reason:"冷麺：₩8,000〜₩14,000。平壌冷麺の老舗（乙密台等）は₩14,000前後。咸興冷麺はビビン冷麺で辛い。"},
-        "🍲 サムゲタン":{min:15000,avg:17000,max:20000,trend:"+8%",reason:"サムゲタン：₩15,000〜₩20,000。土俗村サムゲタン・百年土種参鶏湯など名店多数。漢方鶏スープ料理。"},
-        "🌶️ トッポッキ":{min:4000,avg:5000,max:8000,trend:"+10%",reason:"トッポッキ：屋台₩4,000〜₩6,000、専門店₩6,000〜₩8,000。チーズ・ラーメン追加で₩2,000〜。"},
-        "🍗 韓国チキン":{min:18000,avg:22000,max:28000,trend:"+12%",reason:"韓国チキン1羽：₩18,000〜₩28,000。BBQ・キョチョン・ノルブ等。チメク（チキン+ビール）文化。配達料₩3,000〜。"},
-        "🍙 キンパ":{min:3000,avg:4000,max:6000,trend:"+10%",reason:"キンパ1本：₩3,000〜₩6,000。明洞餃子・キンパ天国など。プレミアム店は₩7,000〜₩10,000。"},
-        "🍱 韓定食コース":{min:30000,avg:55000,max:80000,trend:"+10%",reason:"韓定食コース：₩30,000〜₩80,000。三清閣・コリアハウス等の宮廷料理。10〜20品の伝統料理。"},
-      },
-      仁川:{
-        "✈️ 仁川国際空港":{min:0,avg:0,max:0,trend:"±0%",reason:"仁川国際空港：入場無料。世界トップクラスの空港。アイススケート場・カジノ・スパ等。ターミナル間移動はシャトルバス。"},
-        "🌊 月尾島":{min:0,avg:0,max:0,trend:"±0%",reason:"月尾島：入島無料。文化通り散策・海鮮料理が名物。月尾テーマパークは別途料金。"},
-        "🌳 ソンドセントラルパーク":{min:0,avg:0,max:0,trend:"±0%",reason:"ソンドセントラルパーク：入園無料。仁川経済自由区域の中心。ボート₩8,000・水上タクシー₩4,000。"},
-        "🏮 チャイナタウン":{min:0,avg:0,max:0,trend:"±0%",reason:"仁川チャイナタウン：散策無料。韓国最大規模。チャジャン麺発祥の地。三国志壁画通り。"},
-        "🏛️ ソンドコンベンシア":{min:0,avg:0,max:0,trend:"±0%",reason:"ソンドコンベンシア：入場無料。国際会議場。周辺に高層ビル・トリプルストリート商業施設。"},
-        "🌳 自由公園":{min:0,avg:0,max:0,trend:"±0%",reason:"自由公園：入園無料。韓国最古の西洋式公園（1888年開園）。マッカーサー像・桜の名所。"},
-        "🛍️ 新浦国際市場":{min:0,avg:0,max:0,trend:"±0%",reason:"新浦国際市場：入場無料。チメク・新浦サンドイッチ・ダッカンジョン（甘辛チキン）が名物。"},
-        "⚾ Wyverns野球":{min:8000,avg:15000,max:30000,trend:"+10%",reason:"SSGランダースホーム試合：内野₩8,000〜外野₩30,000。文鶴球場（インチョンSSGランダースフィールド）。"},
-        "🎢 月尾テーマパーク":{min:25000,avg:30000,max:35000,trend:"+8%",reason:"月尾テーマパーク自由利用券：大人₩30,000、小人₩25,000。バイキング・ディスコパンパン等。"},
-        "🌉 仁川大橋":{min:0,avg:0,max:0,trend:"±0%",reason:"仁川大橋：通行無料（一般道）、有料区間あり。世界6位の長さの斜張橋（21.4km）。"},
-        "🍜 チャジャン麺":{min:6000,avg:8000,max:12000,trend:"+10%",reason:"チャジャン麺：仁川チャイナタウン発祥。₩6,000〜₩12,000。元祖韓国式中華の代表料理。"},
-        "🍲 海鮮鍋":{min:25000,avg:40000,max:60000,trend:"+10%",reason:"海鮮鍋（ヘムルタン）：2〜3人前₩25,000〜₩60,000。新浦・月尾島の港町ならではの新鮮さ。"},
-        "🌶️ 新浦ラッポッキ":{min:6000,avg:8000,max:10000,trend:"+10%",reason:"新浦ラッポッキ（トッポッキ+ラーメン）：₩6,000〜₩10,000。新浦国際市場が発祥地。"},
-        "🦪 月尾島貝焼き":{min:30000,avg:40000,max:60000,trend:"+10%",reason:"貝焼き（チョゲグイ）：2人前盛り合わせ₩30,000〜₩60,000。月尾島の海岸沿いの専門店。"},
-        "🥖 シナモンパン":{min:3000,avg:5000,max:8000,trend:"+10%",reason:"イ・ガネ・シナモンロール（コルモク食堂）：₩3,000〜。仁川名物のスイーツパン。"},
-        "🍞 アンパン":{min:1500,avg:2500,max:4000,trend:"+8%",reason:"新浦アンパン（あんこパン）：₩1,500〜₩4,000。控菜豆あん入りが特徴。仁川の老舗パン。"},
-        "🥞 海鮮チヂミ":{min:12000,avg:18000,max:25000,trend:"+10%",reason:"海鮮チヂミ（ヘムルパジョン）：₩12,000〜₩25,000。マッコリと合わせて楽しむ韓国伝統料理。"},
-        "🍺 生ビール":{min:4000,avg:6000,max:8000,trend:"+8%",reason:"生ビール500ml：₩4,000〜₩8,000。チャイナタウン・月尾島の海風と一緒に。"},
-      },
-      釜山:{
-        "🏖️ 海雲台ビーチ":{min:0,avg:0,max:0,trend:"±0%",reason:"海雲台ビーチ：入場無料。1.5kmの白砂ビーチ。夏は釜山最大の海水浴場。パラソル・チェア₩10,000〜。"},
-        "🏘️ 甘川文化村":{min:0,avg:0,max:0,trend:"±0%",reason:"甘川文化村：入村無料。「韓国のマチュピチュ」。スタンプツアーマップ₩2,000で33ヶ所巡れる。9〜18時。"},
-        "🐟 チャガルチ市場":{min:0,avg:0,max:0,trend:"±0%",reason:"チャガルチ市場：入場無料。韓国最大の海鮮市場。1階で購入→2階食堂で調理可能（調理代別途）。"},
-        "🏯 海東龍宮寺":{min:0,avg:0,max:0,trend:"±0%",reason:"海東龍宮寺：参拝無料。韓国で唯一の海辺の仏教寺院。1376年創建。日の出スポット・桜の名所。"},
-        "🗼 釜山タワー":{min:12000,avg:12000,max:12000,trend:"+10%",reason:"釜山タワー（ダイヤモンドタワー）：大人₩12,000、小中高₩9,000、幼児₩6,000。龍頭山公園内、地上120m。"},
-        "🚂 ブルーラインパーク":{min:7000,avg:13000,max:20000,trend:"+8%",reason:"海雲台ブルーラインパーク：海岸列車₩7,000、空中カプセル₩30,000（往復）。海沿いの絶景観光列車。"},
-        "🌊 太宗台":{min:0,avg:0,max:0,trend:"±0%",reason:"太宗台：入場無料。ダヌビー列車₩4,000で園内移動可能。釜山南端の絶壁・灯台・展望台。"},
-        "🏖️ 広安里ビーチ":{min:0,avg:0,max:0,trend:"±0%",reason:"広安里ビーチ：入場無料。広安大橋の夜景が美しい。海沿いのカフェ・バー・ナイトクラブ多数。"},
-        "🌳 龍頭山公園":{min:0,avg:0,max:0,trend:"±0%",reason:"龍頭山公園：入場無料。釜山タワー・李舜臣将軍像。エスカレーターで南浦洞・国際市場から徒歩アクセス。"},
-        "🚠 松島ケーブルカー":{min:17000,avg:23000,max:28000,trend:"+10%",reason:"松島海上ケーブルカー：往復大人₩17,000（一般）・₩23,000（クリスタル床）。海上1.62km、世界最長クラス。"},
-        "🍲 豚クッパ":{min:8000,avg:10000,max:13000,trend:"+10%",reason:"テジクッパ（豚クッパ）：₩8,000〜₩13,000。釜山発祥のソウルフード。西面・凡一洞の豚クッパ通りが有名。"},
-        "🍜 ミルミョン":{min:7000,avg:9000,max:12000,trend:"+10%",reason:"ミルミョン（小麦粉冷麺）：₩7,000〜₩12,000。釜山戦争時代発祥。ピョン豚クッパ・佳夜ミルミョン名店。"},
-        "🦐 海鮮鍋":{min:30000,avg:45000,max:70000,trend:"+10%",reason:"海鮮鍋（ヘムルタン）：2〜3人前₩30,000〜₩70,000。チャガルチ市場・海雲台が新鮮で名物。"},
-        "🐟 刺身":{min:30000,avg:50000,max:100000,trend:"+10%",reason:"刺身（フェ）：1〜2人前₩30,000〜₩100,000。チャガルチ・海雲台で新鮮な活魚を選んで調理してもらう。"},
-        "🐙 ナクチポックム":{min:12000,avg:18000,max:25000,trend:"+10%",reason:"ナクチポックム（タコ炒め）：₩12,000〜₩25,000。激辛が特徴。釜山名物の屋台料理。"},
-        "🍚 デジクッパ":{min:8000,avg:10000,max:13000,trend:"+10%",reason:"デジクッパ：豚クッパと同義（釜山方言）。₩8,000〜₩13,000。深いコクのあるスープご飯。"},
-        "🦐 エビ焼き":{min:35000,avg:50000,max:80000,trend:"+10%",reason:"エビ焼き（セウグイ）：1人前₩35,000〜₩80,000。塩釜で焼く新鮮なエビ料理。海雲台の名店多数。"},
-        "🍹 シッケ":{min:3000,avg:5000,max:8000,trend:"+8%",reason:"シッケ（米の甘酒）：1杯₩3,000〜₩8,000。釜山伝統の発酵飲料。冷たく爽やか。"},
-      },
-      大邱:{
-        "🚠 八公山ロープウェイ":{min:11000,avg:11000,max:11000,trend:"+5%",reason:"八公山ロープウェイ往復：大人₩11,000、子供₩7,000。標高820mの絶景。桐華寺へのアクセス。"},
-        "🛍️ 西門市場":{min:0,avg:0,max:0,trend:"±0%",reason:"西門市場：入場無料。韓国3大市場の1つ。夜市が有名（金・土曜）。納豆チム・キムチが名物。"},
-        "🛍️ 東城路":{min:0,avg:0,max:0,trend:"±0%",reason:"東城路：散策無料。大邱の明洞と呼ばれる繁華街。ファッション・グルメ・カフェが集中。"},
-        "🏛️ 近代文化通り":{min:5000,avg:5000,max:5000,trend:"±0%",reason:"近代文化通りツアー：日本語ガイド₩5,000〜。日本統治時代の建物・教会・歴史的建造物を巡る。"},
-        "⛪ 桂山聖堂":{min:0,avg:0,max:0,trend:"±0%",reason:"桂山聖堂：見学無料。1902年建造の韓国最古のゴシック式聖堂の一つ。国指定史跡。"},
-        "🌿 薬令市":{min:0,avg:0,max:0,trend:"±0%",reason:"薬令市（韓医薬博物館）：散策無料、博物館入館₩1,000。350年以上の歴史を持つ韓方薬市場。"},
-        "🗼 大邱83タワー":{min:10000,avg:10000,max:10000,trend:"+5%",reason:"大邱83タワー展望台：大人₩10,000、小人₩7,000。地上202m。頭流公園内、リフトで山頂へ。"},
-        "🌳 頭流公園":{min:0,avg:0,max:0,trend:"±0%",reason:"頭流公園：入園無料。大邱最大の都市公園。文化芸術会館・83タワー・遊園地（パンビロランド）併設。"},
-        "🛍️ 安吉モクチェ通り":{min:0,avg:0,max:0,trend:"±0%",reason:"安吉モクチェ通り：散策無料。家具・木工芸品の専門通り。インテリア好きに人気。"},
-        "🏛️ 青羅言堂":{min:0,avg:0,max:0,trend:"±0%",reason:"青羅言堂：見学無料。大邱の歴史的キリスト教教会の集積エリア。桜の名所としても有名。"},
-        "🍖 マクチャンクイ":{min:10000,avg:13000,max:18000,trend:"+10%",reason:"マクチャンクイ（豚のホルモン焼き）：₩10,000〜₩18,000。大邱10味の代表格。安吉路の名店多数。"},
-        "🍗 平和市場チメッ":{min:18000,avg:22000,max:28000,trend:"+10%",reason:"平和市場チキン横丁：チメク（チキン+ビール）セット₩18,000〜₩28,000。50年の歴史。"},
-        "🥟 ナプチャクマンドゥ":{min:3000,avg:4000,max:6000,trend:"+8%",reason:"ナプチャクマンドゥ（平たい餃子）：₩3,000〜₩6,000。大邱発祥のB級グルメ。西門市場の名物。"},
-        "🥩 テジカルビ":{min:12000,avg:16000,max:25000,trend:"+10%",reason:"テジカルビ（豚カルビ）：1人前₩12,000〜₩25,000。大邱十味の一つ。"},
-        "🐐 フクヨムソ":{min:30000,avg:45000,max:60000,trend:"+10%",reason:"フクヨムソ（黒山羊スープ）：₩30,000〜₩60,000。大邱の薬念料理。スタミナ食。"},
-        "🍱 十大味":{min:8000,avg:15000,max:25000,trend:"+10%",reason:"大邱十味（10代表料理）巡り：1食₩8,000〜₩25,000。マクチャンクイ・ヤキンユッケ・タレラーメン等。"},
-        "🌶️ 辛いカルグクス":{min:7000,avg:9000,max:13000,trend:"+10%",reason:"辛いカルグクス（手打ち麺）：₩7,000〜₩13,000。大邱十味の一つ。煮干し出汁のあっさり辛口。"},
-        "🍳 ヤキメシ":{min:7000,avg:10000,max:14000,trend:"+10%",reason:"ヤキメシ（焼き飯）：₩7,000〜₩14,000。大邱風炒飯。鉄板で香ばしく焼き上げる。"},
-      },
-      済州島:{
-        "🌋 城山日出峰":{min:5000,avg:5000,max:5000,trend:"+5%",reason:"城山日出峰：大人₩5,000、小人₩2,500。ユネスコ世界自然遺産。180m頂上から日の出絶景。"},
-        "🏔️ 漢拏山国立公園":{min:0,avg:0,max:0,trend:"±0%",reason:"漢拏山国立公園：入山無料（駐車場₩2,000）。韓国最高峰1947m。観音寺コース・城板岳コース等。"},
-        "🕳️ 万丈窟":{min:4000,avg:4000,max:4000,trend:"±0%",reason:"万丈窟：大人₩4,000、小人₩2,000。世界最長級の溶岩洞窟（13.4km）。1km部分のみ公開。"},
-        "🐄 牛島フェリー":{min:10500,avg:10500,max:10500,trend:"+8%",reason:"牛島フェリー（城山港〜牛島）往復：大人₩10,500、小人₩4,000。約15分。レンタル電動自転車別途。"},
-        "💧 天帝淵瀑布":{min:2500,avg:2500,max:2500,trend:"±0%",reason:"天帝淵瀑布：大人₩2,500、小人₩1,400。3段の滝。仙臨橋・五仙女像が美しい。"},
-        "💧 正房瀑布":{min:2500,avg:2500,max:2500,trend:"±0%",reason:"正房瀑布：大人₩2,500、小人₩1,400。アジア唯一海に直接落ちる滝（高さ23m）。西帰浦の名所。"},
-        "🌳 テジボン公園":{min:0,avg:0,max:0,trend:"±0%",reason:"テジボン公園：入園無料。済州市内の小高い丘。済州市・遠く漢拏山を一望できる絶景スポット。"},
-        "🪨 龍頭岩":{min:0,avg:0,max:0,trend:"±0%",reason:"龍頭岩：見学無料。済州市海岸沿いの龍頭の形をした奇岩。観光バスツアーの定番。"},
-        "🏘️ ヒーリョンタウン":{min:0,avg:0,max:0,trend:"±0%",reason:"ヒーリョン（海女）タウン：散策無料。済州海女文化を体験できるエリア。海女ショー（要予約）。"},
-        "🏖️ 中文海水浴場":{min:0,avg:0,max:0,trend:"±0%",reason:"中文海水浴場：入場無料。韓国を代表するサーフィンスポット。リゾートホテル・水族館が集積。"},
-        "🐖 黒豚焼肉":{min:20000,avg:28000,max:40000,trend:"+12%",reason:"済州黒豚（フクテジ）焼肉：1人前₩20,000〜₩40,000。脂が甘く、ジューシー。済州島の名物中の名物。"},
-        "🍜 テジコギグクス":{min:8000,avg:10000,max:13000,trend:"+10%",reason:"テジコギグクス（豚出汁麺）：₩8,000〜₩13,000。済州伝統料理。豚骨スープと太麺。"},
-        "🍲 アワビ粥":{min:15000,avg:20000,max:30000,trend:"+10%",reason:"アワビ粥（チョンボッチュク）：₩15,000〜₩30,000。済州海女が獲ったアワビの濃厚な粥。"},
-        "🌊 海女料理":{min:30000,avg:50000,max:80000,trend:"+10%",reason:"海女料理コース：₩30,000〜₩80,000。アワビ・サザエ・タコ・ウニ等の海女が獲った海産物料理。"},
-        "🐟 タチウオ料理":{min:25000,avg:35000,max:50000,trend:"+10%",reason:"タチウオ煮付け（カルチチョリム）：₩25,000〜₩50,000。済州近海で獲れた巨大タチウオを甘辛く煮込む。"},
-        "🏄 サーフィン体験":{min:50000,avg:70000,max:100000,trend:"+8%",reason:"サーフィン体験（中文ビーチ等）：2時間レッスン₩50,000〜₩100,000。ボード・ウェットスーツレンタル込。"},
-        "🍡 オメギ餅":{min:1000,avg:2000,max:3000,trend:"+10%",reason:"オメギ餅：1個₩1,000〜₩3,000。済州伝統の粟もち。小豆・きな粉・松の実をまぶす。"},
-        "🍊 漢拏ボン":{min:5000,avg:10000,max:20000,trend:"+8%",reason:"漢拏ボン（柑橘）：1kg₩5,000〜₩20,000。済州島特産の高級柑橘。糖度高く果汁たっぷり。"},
-      },
-      全州:{
-        "🏘️ 全州韓屋村":{min:0,avg:0,max:0,trend:"±0%",reason:"全州韓屋村：散策無料。約700軒の韓屋が並ぶ韓国最大規模の韓屋集落。韓服レンタル₩15,000〜。"},
-        "🏯 慶基殿":{min:3000,avg:3000,max:3000,trend:"±0%",reason:"慶基殿：大人₩3,000、青少年₩2,000、子供₩1,000。朝鮮王朝太祖・李成桂の御真を奉る。"},
-        "⛪ 殿洞聖堂":{min:0,avg:0,max:0,trend:"±0%",reason:"殿洞聖堂：見学無料。1914年建造のロマネスク式聖堂。韓国カトリック殉教者の聖地。"},
-        "🌳 梧木台":{min:0,avg:0,max:0,trend:"±0%",reason:"梧木台：入場無料。全州韓屋村を見下ろせる展望台。李成桂の故郷。徒歩15分で到着。"},
-        "🏛️ 寒碧堂":{min:0,avg:0,max:0,trend:"±0%",reason:"寒碧堂：見学無料。15世紀建造の楼閣。全州川沿いの景勝地。桜・紅葉が美しい。"},
-        "🏛️ 全州郷校":{min:0,avg:0,max:0,trend:"±0%",reason:"全州郷校：見学無料。朝鮮時代の地方教育機関。樹齢400年以上のイチョウが見事。秋は黄葉の名所。"},
-        "🛍️ 南部市場":{min:0,avg:0,max:0,trend:"±0%",reason:"南部市場：入場無料。1905年開場の伝統市場。コンナムルクッパ・モジュチプの名店多数。青年夢の店街。"},
-        "🌳 徳津公園":{min:0,avg:0,max:0,trend:"±0%",reason:"徳津公園：入園無料。連湖が美しい都市公園。夏のハス祭り・冬は氷上スケート場。"},
-        "🍶 マッコリ通り":{min:0,avg:0,max:0,trend:"±0%",reason:"全州マッコリ通り：散策無料。マッコリ1壺₩15,000〜（つまみ盛り合わせ付）。三川洞・西新洞の名所。"},
-        "🎨 工芸品展示館":{min:0,avg:0,max:0,trend:"±0%",reason:"全州伝統工芸品展示館：入館無料。韓紙・刺繍・陶磁器の作家作品展示。体験プログラム₩10,000〜。"},
-        "🍚 全州ビビンバ":{min:12000,avg:15000,max:20000,trend:"+10%",reason:"全州ビビンバ：₩12,000〜₩20,000。元祖の地・全州の特色は黄銅器（놋그릇）で提供される伝統スタイル。"},
-        "🍲 コンナムルクッパ":{min:7000,avg:9000,max:12000,trend:"+8%",reason:"コンナムルクッパ（豆もやしご飯）：₩7,000〜₩12,000。三百家・現代屋が老舗。二日酔いの朝に最適。"},
-        "🍶 マッコリ":{min:15000,avg:25000,max:40000,trend:"+10%",reason:"マッコリ1壺＋つまみセット：₩15,000〜₩40,000。全州式は壺の数だけつまみが豊富。三天洞が有名。"},
-        "🍡 伝統菓子":{min:2000,avg:5000,max:10000,trend:"+8%",reason:"全州韓菓・パッピンス：₩2,000〜₩10,000。韓屋村で職人手作りの伝統菓子。"},
-        "🌶️ ピチョリ唐辛子":{min:5000,avg:8000,max:12000,trend:"+10%",reason:"ピチョリ唐辛子料理：₩5,000〜₩12,000。全州近郊のピチョリ唐辛子は辛さ・香りが特別。"},
-        "🍫 PNBチョコパイ":{min:9000,avg:10000,max:12000,trend:"+5%",reason:"PNB（豊年製菓）チョコパイ：1箱（12個入）₩9,000〜₩12,000。全州ランチパッケージのお土産定番。"},
-        "🍙 文化キンパ":{min:4000,avg:5000,max:7000,trend:"+8%",reason:"文化キンパ：₩4,000〜₩7,000。南部市場名物。具材が豊富で20cm以上の長さ。"},
-        "🍲 十里堤野菜炒め":{min:8000,avg:12000,max:18000,trend:"+10%",reason:"十里堤野菜炒め定食：₩8,000〜₩18,000。郊外農家の伝統的な野菜中心の田舎料理。"},
-      },
-      慶州:{
-        "🏯 仏国寺":{min:6000,avg:6000,max:6000,trend:"+5%",reason:"仏国寺：大人₩6,000、中高生₩4,000、子供₩3,000。ユネスコ世界遺産。新羅時代の代表的寺院。"},
-        "🗿 石窟庵":{min:6000,avg:6000,max:6000,trend:"+5%",reason:"石窟庵：大人₩6,000。仏国寺の山頂にある石窟寺院。本尊釈迦如来像が国宝。"},
-        "🔭 瞻星台":{min:0,avg:0,max:0,trend:"±0%",reason:"瞻星台：入場無料（周辺の月城公園内）。新羅時代の東洋最古の天文台。約7世紀建造。"},
-        "🌊 雁鴨池（東宮と月池）":{min:3000,avg:3000,max:3000,trend:"±0%",reason:"東宮と月池（雁鴨池）：大人₩3,000、青少年₩2,000、子供₩1,000。新羅王宮の離宮跡。夜のライトアップ絶景。"},
-        "⚱️ 大陵苑":{min:3000,avg:3000,max:3000,trend:"±0%",reason:"大陵苑（天馬塚）：大人₩3,000、青少年₩2,000、子供₩1,000。23基の新羅古墳群。天馬塚は内部見学可。"},
-        "🏛️ 慶州歴史地区":{min:0,avg:0,max:0,trend:"±0%",reason:"慶州歴史地区：散策無料。ユネスコ世界遺産。瞻星台・月城・古墳群を含むエリア全体。"},
-        "🏘️ 良洞民俗村":{min:4000,avg:4000,max:4000,trend:"±0%",reason:"良洞民俗村：大人₩4,000、青少年₩2,000、子供₩1,500。ユネスコ世界遺産。500年以上の歴史を持つ朝鮮時代の村。"},
-        "🏛️ 統一殿":{min:0,avg:0,max:0,trend:"±0%",reason:"統一殿：入場無料。新羅統一を記念する記念館。三国統一を成し遂げた金庾信・武烈王・文武王を祀る。"},
-        "🌳 普門観光団地":{min:0,avg:0,max:0,trend:"±0%",reason:"普門観光団地：入場無料。リゾート地区。湖周辺に高級ホテル・遊園地・水族館。"},
-        "🗼 慶州タワー":{min:5000,avg:5000,max:5000,trend:"+5%",reason:"慶州タワー：大人₩5,000、青少年₩4,000、子供₩3,000。地上82m。慶州エキスポ大公園内。"},
-        "🍞 皇南パン":{min:1000,avg:1500,max:2000,trend:"+8%",reason:"皇南パン：1個₩1,000〜₩2,000、10個入箱₩12,000〜。70年の歴史を持つ慶州土産の定番。あんこ入り焼きパン。"},
-        "🍚 慶州ビビンバ":{min:10000,avg:13000,max:18000,trend:"+10%",reason:"慶州ビビンバ：₩10,000〜₩18,000。サムフップル（包み肉料理）・新羅式韓定食でも有名。"},
-        "🌿 サムマンス豆腐料理":{min:8000,avg:12000,max:18000,trend:"+10%",reason:"豆腐定食：₩8,000〜₩18,000。慶州・南山周辺の田舎料理。手作り豆腐・ナムル中心。"},
-        "🌼 菊花パン":{min:1000,avg:2000,max:3000,trend:"+8%",reason:"菊花パン（クッカパン）：1個₩1,000〜₩3,000。皇南パンと並ぶ慶州銘菓。菊の花型。"},
-        "🍶 慶州法酒":{min:30000,avg:50000,max:100000,trend:"+10%",reason:"慶州法酒：1本₩30,000〜₩100,000。300年以上の歴史を持つ韓国伝統清酒。慶州崔家秘伝。"},
-        "🍡 韓菓":{min:5000,avg:10000,max:20000,trend:"+8%",reason:"韓菓（伝統菓子）：1箱₩5,000〜₩20,000。慶州韓屋村で手作り菓子作り体験も可能。"},
-        "🍬 麦芽飴":{min:3000,avg:5000,max:10000,trend:"+8%",reason:"麦芽飴（ヨッ）：₩3,000〜₩10,000。慶州伝統の手作り飴。子供から大人まで人気の土産。"},
-        "🍚 ヌルンジ":{min:5000,avg:8000,max:12000,trend:"+8%",reason:"ヌルンジ（おこげスープ）：₩5,000〜₩12,000。皇南パン同様の慶州伝統食。香ばしく素朴な味わい。"},
-      },
-      江陵:{
-        "🏯 鏡浦台":{min:0,avg:0,max:0,trend:"±0%",reason:"鏡浦台：見学無料。1326年建造の楼閣。鏡のような穏やかな湖（鏡浦湖）と松林が美しい。"},
-        "🏖️ 鏡浦海水浴場":{min:0,avg:0,max:0,trend:"±0%",reason:"鏡浦海水浴場：入場無料。江原道で最も人気のビーチ。1.8kmの白砂と松林。サーフィンも盛ん。"},
-        "🏛️ 烏竹軒":{min:3000,avg:3000,max:3000,trend:"±0%",reason:"烏竹軒：大人₩3,000、子供₩1,500。朝鮮時代の学者・李栗谷の生家。₩5,000ウォン紙幣にも描かれる。"},
-        "🏛️ 船橋荘":{min:5000,avg:5000,max:5000,trend:"+5%",reason:"船橋荘：大人₩5,000、子供₩3,000。300年以上の歴史を持つ朝鮮両班家屋。「韓国で最も美しい家」。"},
-        "🚂 正東津":{min:0,avg:0,max:0,trend:"±0%",reason:"正東津：駅入場無料。世界で海に最も近い駅としてギネス認定。日の出の名所。"},
-        "☕ 安木カフェ通り":{min:0,avg:0,max:0,trend:"±0%",reason:"安木コーヒー通り：入場無料。江陵=「韓国のシアトル」。50軒以上のカフェが海沿いに並ぶ。コーヒー1杯₩5,000〜。"},
-        "🛍️ 江陵中央市場":{min:0,avg:0,max:0,trend:"±0%",reason:"江陵中央市場：入場無料。江陵の台所。タッカンマリ・チョダン豆腐・カムジャンチェなどの郷土料理。"},
-        "⚓ 注文津港":{min:0,avg:0,max:0,trend:"±0%",reason:"注文津港：入場無料。「君の名は。」のロケ地として注目された港。新鮮なイカ・タチウオ。"},
-        "🌳 テリョン渓谷":{min:0,avg:0,max:0,trend:"±0%",reason:"テリョン（大関嶺）渓谷：入場無料。標高800mの高原。羊牧場₩9,000・スキー場（冬）が有名。"},
-        "🏔️ 束草秀峰丘":{min:0,avg:0,max:0,trend:"±0%",reason:"束草秀峰丘（雪嶽山）：入山料₩3,500（雪嶽山国立公園）。ケーブルカー₩15,000往復。江陵から1時間。"},
-        "🥡 チョダン豆腐":{min:8000,avg:12000,max:18000,trend:"+10%",reason:"チョダン豆腐定食：₩8,000〜₩18,000。海水で固める江陵伝統豆腐。チョダン豆腐村で味わえる。"},
-        "🌭 オジンオスンデ":{min:10000,avg:15000,max:25000,trend:"+10%",reason:"オジンオスンデ（イカ詰めご飯）：₩10,000〜₩25,000。注文津・束草の名物。イカのお腹に詰めた具を蒸し焼き。"},
-        "🌭 太岩ホットドッグ":{min:3000,avg:4000,max:6000,trend:"+10%",reason:"太岩マーケットのホットドッグ：1本₩3,000〜₩6,000。チーズ・ポテト・チリ等のバリエーション豊富。"},
-        "🍜 ハマグリカルグクス":{min:9000,avg:12000,max:15000,trend:"+8%",reason:"ハマグリカルグクス：₩9,000〜₩15,000。東海岸のあっさり貝出汁手打ち麺。"},
-        "🌿 紅参":{min:30000,avg:50000,max:150000,trend:"+10%",reason:"江原道紅参：100g₩30,000〜₩150,000。江陵周辺は高麗人参の名産地。健康食品として人気。"},
-        "🦪 東海生牡蠣":{min:15000,avg:25000,max:40000,trend:"+10%",reason:"東海岸生牡蠣：1人前₩15,000〜₩40,000。冬季が最盛期。海女が獲った天然物。"},
-        "🍲 ウィ吐豆腐定食":{min:10000,avg:15000,max:20000,trend:"+10%",reason:"ウィ吐豆腐定食：₩10,000〜₩20,000。チョダン豆腐+海鮮の江陵スタイル豆腐料理。"},
-        "🍢 端午祭オデン":{min:3000,avg:5000,max:8000,trend:"+8%",reason:"端午祭オデン：1人前₩3,000〜₩8,000。江陵端午祭（ユネスコ無形文化遺産）の屋台名物。"},
-      },
     },
   },
   タイ:{
@@ -2149,27 +1533,10 @@ function getCityEN(country, cityJa) {
 }
 
 function getPriceInfo(country, city, catId, subCatJa, dist, time, lang) {
-  const staticDB = PRICE_DB[country.name] || {};
-  const defaultDB = getDefaultDB(country);
-  // 静的DBと動的DBをカテゴリ単位でマージ（静的が優先）
-  const db = {
-    food: staticDB.food || defaultDB.food,
-    drink: staticDB.drink || defaultDB.drink,
-    taxi: staticDB.taxi || defaultDB.taxi,
-    hotel: staticDB.hotel || defaultDB.hotel,
-    shopping: staticDB.shopping || defaultDB.shopping,
-    activity: staticDB.activity || defaultDB.activity,
-    famous: staticDB.famous, // famousは静的DBにある場合のみ
-  };
+  const db = PRICE_DB[country.name] || getDefaultDB(country);
   const cf = CITY_FACTOR[city] || 1.0;
   if (catId==="taxi") return getTaxiPrice(db[catId], subCatJa, dist, time, cf);
-  // famous は都市別ネスト構造
-  let base;
-  if (catId === "famous") {
-    base = db.famous?.[city]?.[subCatJa];
-  } else {
-    base = db[catId]?.[subCatJa];
-  }
+  const base = db[catId]?.[subCatJa];
   if (!base) return null;
   // 都市名を英語表記に
   const cityEN = getCityEN(country, city);
@@ -2184,9 +1551,9 @@ function getPriceInfo(country, city, catId, subCatJa, dist, time, lang) {
 }
 
 function judgeVerdict(amount, min, avg, max, t) {
-  if (amount<=avg*0.75) return {verdict:t.cheap,emoji:"🤩",color:"#6ee7b7",bg:"#e0f5ef",pct:Math.round((1-amount/avg)*100)};
-  if (amount<=avg*1.25) return {verdict:t.normal,emoji:"😊",color:"#fde68a",bg:"#fdf6d8",pct:0};
-  return {verdict:t.exp,emoji:"😮",color:"#fdba74",bg:"#fdeee0",pct:Math.round((amount/avg-1)*100)};
+  if (amount<=avg*0.75) return {verdict:t.cheap,emoji:"🤩",color:"#006e52",bg:"#e0f5ef",pct:Math.round((1-amount/avg)*100)};
+  if (amount<=avg*1.25) return {verdict:t.normal,emoji:"😊",color:"#7a5e00",bg:"#fdf6d8",pct:0};
+  return {verdict:t.exp,emoji:"😮",color:"#b84800",bg:"#fdeee0",pct:Math.round((amount/avg-1)*100)};
 }
 
 // ─────────────────────────────────────────────────────────
@@ -3054,28 +2421,12 @@ const TREND_DATA = [
 // DESIGN SYSTEM
 // ─────────────────────────────────────────────────────────
 const S = {
-  // メインの色
-  accent:"#60b0e8", accentLight:"#a8d9f5", light:"#c4e3f7",
-  // ピンク（選択中・アクセント用）
-  pink:"#f472b6", pinkLight:"#fbcfe8", pinkDeep:"#ec4899",
-  // テキスト色
-  textWhite:"#ffffff", textSoft:"rgba(255,255,255,0.85)", textMuted:"rgba(255,255,255,0.6)",
-  // 旧名互換
-  muted:"rgba(255,255,255,0.6)",
-  // ボーダー（半透明白）
-  border:"rgba(255,255,255,0.25)", borderStrong:"rgba(255,255,255,0.4)",
-  bg:"#0a1a2e",
-  // カードは半透明ガラス調
-  card:"rgba(255,255,255,0.08)",
-  cardStrong:"rgba(255,255,255,0.14)",
-  tag:"rgba(255,255,255,0.10)",
-  // ステータスカラー（明るくして紺背景でも読める）
-  cheap:"#34d399", normal:"#fbbf24", expensive:"#fb923c",
-  // 背景グラデ
+  accent:"#1a56a0", accentLight:"#3b82d4", light:"#60b0e8",
+  muted:"#6b6560", border:"#d4cec8", bg:"#f5f3ee",
+  card:"#ffffff", tag:"#eceae4",
+  cheap:"#006e52", normal:"#7a5e00", expensive:"#b84800",
   grad:"linear-gradient(165deg,#0a1a2e 0%,#16213e 50%,#1a3a5c 100%)",
   emerald:"linear-gradient(145deg,#052e1c,#065f46)",
-  // アクセントオレンジ
-  orange:"#ffb380", orangeDeep:"#ff8c42",
 };
 
 // ─────────────────────────────────────────────────────────
@@ -3165,28 +2516,7 @@ export default function App() {
       if (rates) { setLiveRates(rates); setRateStatus("live"); } else setRateStatus("fallback");
       try { const s = localStorage.getItem("nebula_posts"); if (s) setPosts(JSON.parse(s)); } catch {}
     })();
-    // 音声合成の voices を先に読み込む（iOSでは非同期）
-    if (window.speechSynthesis) {
-      window.speechSynthesis.getVoices();
-      window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
-    }
-    // ブラウザの自動翻訳を抑制（Chromeで「翻訳しますか?」が出るのを防ぐ）
-    try {
-      let meta = document.querySelector('meta[name="google"]');
-      if (!meta) {
-        meta = document.createElement("meta");
-        meta.name = "google";
-        document.head.appendChild(meta);
-      }
-      meta.content = "notranslate";
-      document.documentElement.classList.add("notranslate");
-    } catch {}
   }, []);
-
-  // 言語が変わったら <html lang> も同期させる（ブラウザ自動翻訳の判断材料）
-  useEffect(() => {
-    try { document.documentElement.lang = lang; } catch {}
-  }, [lang]);
 
   useEffect(() => {
     if (result && result.isExpensive && globalCountry) setNegotiateCountry(globalCountry);
@@ -3221,7 +2551,7 @@ export default function App() {
   const submitPost = () => {
     if (!postItem && !postText && !postPhoto) { showToast(t.noCmp); return; }
     const idx = (globalCountry?.cities?.ja || []).indexOf(city);
-    const cityLabel = (globalCountry?.cities?.[lang] || globalCountry?.cities?.ja || [])[idx >= 0 ? idx : 0] || city || "";
+    const cityLabel = (globalCountry?.cities?.en || globalCountry?.cities?.ja || [])[idx >= 0 ? idx : 0] || city || "";
     const np = {
       item: postItem,
       price: postPrice,
@@ -3397,7 +2727,7 @@ export default function App() {
       const q = countrySearch.trim().toUpperCase();
       list = list.filter(c => {
         const engName = c.name.replace(/[^\x00-\x7F]/g, "");
-        const label = (c.label?.[lang] || c.label?.en || c.name);
+        const label = (c.label?.en || c.name);
         return label.toUpperCase().startsWith(q) || c.name.startsWith(q);
       });
     }
@@ -3410,7 +2740,7 @@ export default function App() {
   };
 
   const Pill = ({ selected, onClick, children, small }) => (
-    <button onClick={onClick} style={{ padding: small ? "6px 11px" : "9px 14px", background: selected ? S.pink : S.tag, border: `1.5px solid ${selected ? S.pink : S.border}`, borderRadius: 24, fontSize: small ? 11 : 13, cursor: "pointer", color: "#fff", whiteSpace: "nowrap", fontWeight: selected ? 700 : 400, transition: "all 0.2s" }}>
+    <button onClick={onClick} style={{ padding: small ? "6px 11px" : "9px 14px", background: selected ? S.accent : S.tag, border: `1.5px solid ${selected ? S.accent : S.border}`, borderRadius: 24, fontSize: small ? 11 : 13, cursor: "pointer", color: selected ? "#fff" : "#1a1a14", whiteSpace: "nowrap", fontWeight: selected ? 700 : 400, transition: "all 0.2s" }}>
       {children}
     </button>
   );
@@ -3538,116 +2868,63 @@ export default function App() {
   const hText = helpTexts[lang] || helpTexts.en;
 
   return (
-    <div style={{ background: S.grad, minHeight:"100vh", fontFamily:"'Noto Sans JP','DM Sans',sans-serif", paddingBottom:90 }}>
+    <div style={{ background: S.bg, minHeight:"100vh", fontFamily:"'Noto Sans JP','DM Sans',sans-serif", paddingBottom:90 }}>
       {/* ── Inline CSS for mic animations ── */}
       <style>{`
         @keyframes npbar { 0%,100%{transform:scaleY(0.4)} 50%{transform:scaleY(1)} }
         @keyframes nppulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
         @keyframes nprotate { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        @keyframes npaurora { 0%,100%{opacity:0.5} 50%{opacity:0.85} }
-        /* All cards: glass effect */
-        .np-glass {
-          backdrop-filter: blur(14px) saturate(140%);
-          -webkit-backdrop-filter: blur(14px) saturate(140%);
-          border: 1px solid rgba(255,255,255,0.18);
-          box-shadow: 0 8px 32px rgba(0,0,0,0.25);
-        }
-        /* Input & textarea: white text on dark glass */
-        input, textarea {
-          color: #ffffff !important;
-          caret-color: #ffffff;
-        }
-        input::placeholder, textarea::placeholder {
-          color: rgba(255,255,255,0.55) !important;
-        }
-        /* Hide native autofill background */
-        input:-webkit-autofill {
-          -webkit-text-fill-color: #ffffff;
-          -webkit-box-shadow: 0 0 0 1000px rgba(255,255,255,0.05) inset;
-        }
       `}</style>
-      {/* ── A-5 Midnight Ocean background (full screen, large globe, aurora) ── */}
-      <div style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:S.grad, zIndex:0, overflow:"hidden" }}>
-        <svg viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice" style={{ position:"absolute", inset:0, width:"100%", height:"100%" }}>
+      {/* ── A-5 Midnight Ocean background (stars + meridians + airplane trail) ── */}
+      <div style={{ position:"fixed", top:0, left:0, right:0, height:380, background:S.grad, zIndex:0, overflow:"hidden" }}>
+        <svg viewBox="0 0 400 380" preserveAspectRatio="xMidYMid slice" style={{ position:"absolute", inset:0, width:"100%", height:"100%" }}>
           <defs>
-            <radialGradient id="npGlow" cx="15%" cy="15%" r="60%">
-              <stop offset="0%" stopColor="#60b0e8" stopOpacity="0.35"/>
+            <radialGradient id="npGlow" cx="20%" cy="20%" r="55%">
+              <stop offset="0%" stopColor="#60b0e8" stopOpacity="0.22"/>
               <stop offset="100%" stopColor="#60b0e8" stopOpacity="0"/>
             </radialGradient>
-            <radialGradient id="npGlow2" cx="85%" cy="40%" r="55%">
-              <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.30"/>
+            <radialGradient id="npGlow2" cx="85%" cy="35%" r="45%">
+              <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.16"/>
               <stop offset="100%" stopColor="#a78bfa" stopOpacity="0"/>
             </radialGradient>
-            <radialGradient id="npGlow3" cx="50%" cy="85%" r="60%">
-              <stop offset="0%" stopColor="#34d399" stopOpacity="0.18"/>
-              <stop offset="100%" stopColor="#34d399" stopOpacity="0"/>
-            </radialGradient>
-            <linearGradient id="npAurora1" x1="0" y1="0" x2="1" y2="0.5">
-              <stop offset="0%" stopColor="#10b981" stopOpacity="0"/>
-              <stop offset="50%" stopColor="#10b981" stopOpacity="0.22"/>
-              <stop offset="100%" stopColor="#a78bfa" stopOpacity="0.22"/>
-            </linearGradient>
-            <linearGradient id="npAurora2" x1="0" y1="0" x2="1" y2="0.3">
-              <stop offset="0%" stopColor="#60b0e8" stopOpacity="0"/>
-              <stop offset="50%" stopColor="#60b0e8" stopOpacity="0.28"/>
-              <stop offset="100%" stopColor="#34d399" stopOpacity="0.18"/>
-            </linearGradient>
             <linearGradient id="npTrail" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="#60b0e8" stopOpacity="0"/>
-              <stop offset="50%" stopColor="#60b0e8" stopOpacity="0.5"/>
+              <stop offset="50%" stopColor="#60b0e8" stopOpacity="0.45"/>
               <stop offset="100%" stopColor="#60b0e8" stopOpacity="0.05"/>
             </linearGradient>
             <linearGradient id="npTrail2" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="#a78bfa" stopOpacity="0"/>
-              <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.3"/>
+              <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.25"/>
               <stop offset="100%" stopColor="#a78bfa" stopOpacity="0"/>
             </linearGradient>
           </defs>
-          {/* Multi-layered aurora glows */}
-          <rect width="400" height="800" fill="url(#npGlow)"/>
-          <rect width="400" height="800" fill="url(#npGlow2)"/>
-          <rect width="400" height="800" fill="url(#npGlow3)"/>
-          {/* Aurora wave bands */}
-          <path d="M 0 120 Q 100 80 200 130 T 400 120 L 400 200 Q 300 240 200 200 T 0 220 Z" fill="url(#npAurora1)" opacity="0.7"/>
-          <path d="M 0 460 Q 120 420 220 470 T 400 460 L 400 550 Q 280 590 180 540 T 0 560 Z" fill="url(#npAurora2)" opacity="0.6"/>
-          {/* LARGE globe meridians/latitudes - more prominent */}
-          <g opacity="0.13" stroke="#60b0e8" strokeWidth="1.2" fill="none">
-            <ellipse cx="200" cy="400" rx="320" ry="320"/>
-            <ellipse cx="200" cy="400" rx="260" ry="320"/>
-            <ellipse cx="200" cy="400" rx="180" ry="320"/>
-            <ellipse cx="200" cy="400" rx="90" ry="320"/>
-            <ellipse cx="200" cy="400" rx="320" ry="100"/>
-            <ellipse cx="200" cy="400" rx="320" ry="200"/>
-            <ellipse cx="200" cy="400" rx="320" ry="270"/>
-          </g>
-          {/* Second smaller globe top-left */}
-          <g opacity="0.08" stroke="#a78bfa" strokeWidth="1" fill="none">
-            <ellipse cx="60" cy="120" rx="80" ry="80"/>
-            <ellipse cx="60" cy="120" rx="50" ry="80"/>
-            <ellipse cx="60" cy="120" rx="80" ry="30"/>
-            <ellipse cx="60" cy="120" rx="80" ry="55"/>
+          {/* Aurora glow overlays */}
+          <rect width="400" height="380" fill="url(#npGlow)"/>
+          <rect width="400" height="380" fill="url(#npGlow2)"/>
+          {/* Globe meridians/latitudes (very subtle) */}
+          <g opacity="0.07" stroke="#60b0e8" strokeWidth="0.8" fill="none">
+            <ellipse cx="200" cy="190" rx="200" ry="200"/>
+            <ellipse cx="200" cy="190" rx="140" ry="200"/>
+            <ellipse cx="200" cy="190" rx="80" ry="200"/>
+            <ellipse cx="200" cy="190" rx="20" ry="200"/>
+            <ellipse cx="200" cy="190" rx="200" ry="70"/>
+            <ellipse cx="200" cy="190" rx="200" ry="140"/>
           </g>
           {/* Airplane trails */}
-          <path d="M -20 220 Q 200 90 420 260" stroke="url(#npTrail)" strokeWidth="1.8" fill="none" strokeDasharray="4,5" opacity="0.7"/>
-          <path d="M -20 600 Q 200 470 420 640" stroke="url(#npTrail2)" strokeWidth="1.3" fill="none" strokeDasharray="3,4" opacity="0.55"/>
-          <path d="M -20 380 Q 200 280 420 100" stroke="url(#npTrail)" strokeWidth="1" fill="none" strokeDasharray="2,4" opacity="0.4"/>
-          {/* Stars - more, denser */}
+          <path d="M -20 220 Q 200 90 420 260" stroke="url(#npTrail)" strokeWidth="1.5" fill="none" strokeDasharray="3,4" opacity="0.65"/>
+          <path d="M -20 320 Q 200 200 420 60" stroke="url(#npTrail2)" strokeWidth="1.2" fill="none" strokeDasharray="2,3" opacity="0.45"/>
+          {/* Stars */}
           {[
-            [40,30,0.8,0.8],[120,25,0.6,0.7],[200,40,1.2,0.9],[280,20,0.7,0.7],
-            [340,50,0.5,0.5],[370,80,0.9,0.7],[50,180,0.6,0.5],[160,220,0.5,0.4],
-            [320,190,0.8,0.7],[380,240,0.5,0.5],[30,280,0.6,0.4],[250,290,0.5,0.5],
-            [90,60,0.5,0.5],[170,90,0.6,0.6],[300,120,0.7,0.7],[60,330,0.7,0.6],
-            [200,340,0.6,0.5],[360,330,0.8,0.7],[110,300,0.5,0.4],[230,160,0.7,0.6],
-            [25,420,0.6,0.5],[150,440,0.5,0.4],[280,460,0.7,0.6],[380,420,0.6,0.5],
-            [70,520,0.5,0.4],[200,540,0.8,0.7],[330,560,0.6,0.5],[100,620,0.7,0.6],
-            [240,650,0.5,0.4],[370,680,0.6,0.5],[40,720,0.5,0.4],[180,740,0.7,0.6],
-            [310,760,0.6,0.5],[160,500,0.5,0.4],[290,400,0.6,0.5],[55,400,0.7,0.6],
+            [40,30,0.8,0.8],[120,25,0.5,0.6],[200,40,1.2,0.9],[280,20,0.7,0.7],
+            [340,50,0.5,0.5],[370,80,0.8,0.6],[50,180,0.6,0.5],[160,220,0.5,0.4],
+            [320,190,0.7,0.6],[380,240,0.5,0.5],[30,280,0.6,0.4],[250,290,0.5,0.5],
+            [90,60,0.5,0.5],[170,90,0.6,0.6],[300,120,0.7,0.7],[60,330,0.6,0.5],
+            [200,340,0.5,0.4],[360,330,0.7,0.6],[110,300,0.5,0.4],[230,160,0.6,0.5],
           ].map((s,i) => (
             <circle key={i} cx={s[0]} cy={s[1]} r={s[2]} fill="#fff" opacity={s[3]}/>
           ))}
-          {/* Airplane emoji-style icons */}
-          <text x="345" y="105" fontSize="13" opacity="0.65">✈️</text>
-          <text x="40" y="500" fontSize="11" opacity="0.5">✈️</text>
+          {/* Airplane emoji-style icon */}
+          <text x="345" y="105" fontSize="11" opacity="0.55">✈️</text>
         </svg>
       </div>
       <div style={{ position:"relative", zIndex:1, maxWidth:860, margin:"0 auto" }}>
@@ -3679,10 +2956,10 @@ export default function App() {
         {/* ── グローバル国選択 (全タブ共通) ── */}
         <div style={{ background:"rgba(255,255,255,0.12)", margin:"0 14px 10px", borderRadius:16, padding:"10px 12px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:7 }}>
-            <div style={{ fontSize:11, color:"#ffffff", fontWeight:800, letterSpacing:1 }}>🌍 {t.selectCountry}</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.85)", fontWeight:700, letterSpacing:1 }}>🌍 {t.selectCountry}</div>
             {globalCountry && (
               <div style={{ fontSize:12, color:"#fff", fontWeight:700, background:"rgba(255,255,255,0.2)", padding:"2px 10px", borderRadius:14 }}>
-                {globalCountry.flag} {globalCountry.label?.[lang] || globalCountry.name}
+                {globalCountry.flag} {globalCountry.label?.en || globalCountry.name}
               </div>
             )}
           </div>
@@ -3708,9 +2985,8 @@ export default function App() {
               <button key={c.name} onClick={() => {
                 setGlobalCountry(c); setCity(null); setResult(null); setCompareItems([]); setNegotiateCountry(null);
                 setScamCity(null); setYouText(""); setYouTranslated(""); setPartnerText(""); setPartnerTranslated("");
-                if (!["日本","韓国"].includes(c.name) && mainCat?.id === "famous") { setMainCat(null); setSubCatJa(null); }
               }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 11px", background:globalCountry?.name===c.name?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.18)", border:`1.5px solid ${globalCountry?.name===c.name?"rgba(255,255,255,0.95)":"rgba(255,255,255,0.3)"}`, borderRadius:36, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0, color:globalCountry?.name===c.name?S.accent:"#fff", fontSize:11, fontWeight:globalCountry?.name===c.name?700:400 }}>
-                <span style={{ fontSize:14 }}>{c.flag}</span>{c.label?.[lang] || c.name}
+                <span style={{ fontSize:14 }}>{c.flag}</span>{c.label?.en || c.name}
               </button>
             ))}
           </div>
@@ -3720,10 +2996,10 @@ export default function App() {
         {tab === "check" && (
           <div>
             <div style={{ padding:"10px 18px 14px" }}>
-              <div style={{ fontSize:22, color:"#ffb380", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:6, textShadow:"0 2px 10px rgba(0,0,0,0.5), 0 0 30px rgba(255,140,66,0.3)" }}>{t.checkT}</div>
-              <div style={{ fontSize:11, color:"#ffd9b8", fontWeight:600, background:"rgba(255,140,66,0.22)", border:"1px solid rgba(255,140,66,0.4)", display:"inline-block", padding:"3px 11px", borderRadius:18, marginTop:3 }}>{t.checkD}</div>
+              <div style={{ fontSize:22, color:"#10b981", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:4, textShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>{t.checkT}</div>
+              <div style={{ fontSize:11, color:"#047857", fontWeight:600, background:"rgba(16,185,129,0.15)", display:"inline-block", padding:"3px 10px", borderRadius:18, marginTop:3 }}>{t.checkD}</div>
             </div>
-            <div style={{ margin:"0 14px", background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:22, padding:18, boxShadow:"0 8px 40px rgba(0,0,0,0.13)" }}>
+            <div style={{ margin:"0 14px", background:S.card, borderRadius:22, padding:18, boxShadow:"0 8px 40px rgba(0,0,0,0.13)" }}>
               {/* Progress bar */}
               <div style={{ display:"flex", gap:5, marginBottom:18 }}>
                 {[!!globalCountry,!!city,!!mainCat,!!subCatJa,parseFloat(amount)>0].map((done,i) => (
@@ -3738,8 +3014,8 @@ export default function App() {
                 <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:7 }}>{t.s2}</div>
                 <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:14 }}>
                   {(globalCountry.cities?.ja || []).map((jaKey, i) => {
-                    const label = (globalCountry.cities?.[lang] || globalCountry.cities?.ja || [])[i] || jaKey;
-                    return <Pill key={jaKey} selected={city===jaKey} onClick={() => { setCity(jaKey); setSubCatJa(null); setResult(null); }} small>{label}</Pill>;
+                    const label = (globalCountry.cities?.en || globalCountry.cities?.ja || [])[i] || jaKey;
+                    return <Pill key={jaKey} selected={city===jaKey} onClick={() => { setCity(jaKey); setResult(null); }} small>{label}</Pill>;
                   })}
                 </div>
               </>}
@@ -3748,10 +3024,10 @@ export default function App() {
               {city && <>
                 <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:7 }}>{t.s3}</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:7, marginBottom:14 }}>
-                  {MAIN_CATS.filter(c => c.id !== "famous" || ["日本","韓国"].includes(globalCountry?.name)).map(c => (
-                    <button key={c.id} onClick={() => { setMainCat(c); setSubCatJa(null); setFoodGroup(null); setResult(null); setCompareItems([]); }} style={{ background:mainCat?.id===c.id?"rgba(244,114,182,0.28)":S.card, border:`2px solid ${mainCat?.id===c.id?S.pink:S.border}`, borderRadius:12, padding:12, cursor:"pointer", textAlign:"left", boxShadow:mainCat?.id===c.id?"0 4px 18px rgba(244,114,182,0.35)":"0 1px 3px rgba(0,0,0,0.2)" }}>
+                  {MAIN_CATS.map(c => (
+                    <button key={c.id} onClick={() => { setMainCat(c); setSubCatJa(null); setFoodGroup(null); setResult(null); setCompareItems([]); }} style={{ background:mainCat?.id===c.id?"#ddeeff":S.card, border:`2px solid ${mainCat?.id===c.id?S.accent:S.border}`, borderRadius:12, padding:12, cursor:"pointer", textAlign:"left", boxShadow:mainCat?.id===c.id?"0 2px 10px rgba(26,86,160,0.2)":"0 1px 3px rgba(0,0,0,0.06)" }}>
                       <div style={{ fontSize:20, marginBottom:4 }}>{c.icon}</div>
-                      <div style={{ fontSize:12, fontWeight:700, color:"#ffffff" }}>{c.name[lang] || c.name.ja}</div>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#1a1a1a" }}>{c.name[lang] || c.name.ja}</div>
                       <div style={{ fontSize:10, color:S.muted, marginTop:2 }}>{c.hint[lang] || c.hint.ja}</div>
                     </button>
                   ))}
@@ -3763,7 +3039,7 @@ export default function App() {
                 <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:6 }}>{t.s4}</div>
                 <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:4, marginBottom:8, scrollbarWidth:"none" }}>
                   {FOOD_GROUPS.map(g => (
-                    <button key={g.label.ja} onClick={() => { setFoodGroup(g.label.ja); setSubCatJa(null); setResult(null); }} style={{ padding:"6px 12px", background:foodGroup===g.label.ja?S.pink:S.tag, border:`1.5px solid ${foodGroup===g.label.ja?S.pink:S.border}`, borderRadius:24, fontSize:11, cursor:"pointer", color:foodGroup===g.label.ja?"#fff":"#ffffff", whiteSpace:"nowrap", flexShrink:0, fontWeight:700 }}>
+                    <button key={g.label.ja} onClick={() => { setFoodGroup(g.label.ja); setSubCatJa(null); setResult(null); }} style={{ padding:"6px 12px", background:foodGroup===g.label.ja?S.accent:S.tag, border:`1.5px solid ${foodGroup===g.label.ja?S.accent:S.border}`, borderRadius:24, fontSize:11, cursor:"pointer", color:foodGroup===g.label.ja?"#fff":"#1a1a14", whiteSpace:"nowrap", flexShrink:0, fontWeight:700 }}>
                       {g.label[lang] || g.label.ja}
                     </button>
                   ))}
@@ -3779,9 +3055,7 @@ export default function App() {
               {mainCat && mainCat.id !== "food" && <>
                 <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:7 }}>{t.s4b}</div>
                 {(() => {
-                  // famousは都市別ネスト構造（東京・京都・大阪）
-                  const sc = mainCat.id === "famous" ? SUB_CATS.famous[city] : SUB_CATS[mainCat.id];
-                  if (!sc) return null;
+                  const sc = SUB_CATS[mainCat.id];
                   const keys = sc.ja; const labels = sc[lang] || sc.ja;
                   return <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:14 }}>{keys.map((k,i) => <Pill key={k} selected={subCatJa===k} onClick={() => { setSubCatJa(k); setResult(null); }}>{labels[i]}</Pill>)}</div>;
                 })()}
@@ -3791,14 +3065,14 @@ export default function App() {
               {mainCat?.id === "taxi" && (
                 <div style={{ marginBottom:14, display:"flex", flexDirection:"column", gap:10 }}>
                   <div>
-                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:S.muted, marginBottom:5 }}><span>{t.dist}</span><span style={{ color:S.pink, fontWeight:700 }}>{taxiDist} km</span></div>
-                    <input type="range" min="1" max="50" value={taxiDist} onChange={e => { setTaxiDist(parseInt(e.target.value)); setResult(null); }} style={{ width:"100%", accentColor:S.pink }} />
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:S.muted, marginBottom:5 }}><span>{t.dist}</span><span style={{ color:S.accent, fontWeight:700 }}>{taxiDist} km</span></div>
+                    <input type="range" min="1" max="50" value={taxiDist} onChange={e => { setTaxiDist(parseInt(e.target.value)); setResult(null); }} style={{ width:"100%", accentColor:S.accent }} />
                   </div>
                   <div>
                     <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:6 }}>{t.time}</div>
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:5 }}>
                       {[["朝",t.am,"🌅"],["昼",t.noon,"☀️"],["夕方",t.pm,"🌆"],["深夜",t.late,"🌙"]].map(([key,label,ic]) => (
-                        <button key={key} onClick={() => { setTaxiTime(key); setResult(null); }} style={{ padding:"7px 3px", background:taxiTime===key?S.pink:S.tag, border:`1.5px solid ${taxiTime===key?S.pink:S.border}`, borderRadius:9, fontSize:10, cursor:"pointer", color:taxiTime===key?"#fff":"#ffffff" }}>{ic} {label}</button>
+                        <button key={key} onClick={() => { setTaxiTime(key); setResult(null); }} style={{ padding:"7px 3px", background:taxiTime===key?S.accent:S.tag, border:`1.5px solid ${taxiTime===key?S.accent:S.border}`, borderRadius:9, fontSize:10, cursor:"pointer", color:taxiTime===key?"#fff":"#1a1a14" }}>{ic} {label}</button>
                       ))}
                     </div>
                   </div>
@@ -3807,44 +3081,33 @@ export default function App() {
 
               {/* ④ Amount */}
               {mainCat && subCatJa && <>
-                {mainCat.id === "famous" && !["東京","京都","大阪","札幌・北海道","仙台","横浜","名古屋","神戸","広島","博多・福岡","那覇・沖縄","ソウル","仁川","釜山","大邱","済州島","全州","慶州","江陵"].includes(city) ? (
-                  <div style={{ background:"rgba(255,140,66,0.15)", border:"1.5px solid rgba(255,140,66,0.45)", borderRadius:13, padding:18, marginBottom:12, textAlign:"center" }}>
-                    <div style={{ fontSize:30, marginBottom:8 }}>🚧</div>
-                    <div style={{ fontSize:13, fontWeight:700, color:"#ffd9b8", marginBottom:5 }}>
-                      {{ja:"このエリアは準備中です",en:"This area is coming soon",zh:"该地区数据准备中",ko:"이 지역은 준비 중입니다",es:"Esta área está en preparación",pt:"Esta área em preparação"}[lang] || "このエリアは準備中です"}
-                    </div>
-                    <div style={{ fontSize:11, color:S.muted, lineHeight:1.6 }}>
-                      {{ja:"日本全11都市・韓国全8都市に対応中。台湾・タイ等は順次拡大予定です。",en:"Available in all 11 Japanese & 8 Korean cities. Taiwan, Thailand etc. coming soon.",zh:"覆盖日本11个、韩国8个主要城市。台湾、泰国等即将上线。",ko:"일본 11개·한국 8개 도시 지원. 대만·태국 등 순차 확대 예정.",es:"Disponible en 11 ciudades japonesas y 8 coreanas. Taiwán, Tailandia próximamente.",pt:"Disponível em 11 cidades japonesas e 8 coreanas. Taiwan, Tailândia em breve."}[lang] || ""}
-                    </div>
-                  </div>
-                ) : <>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:7 }}>
                   <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase" }}>{t.s5}</div>
-                  <button onClick={() => { setCompareMode(!compareMode); setResult(null); setCompareItems([]); }} style={{ fontSize:10, padding:"4px 11px", borderRadius:20, border:`1.5px solid ${compareMode?S.pink:S.border}`, background:compareMode?S.pink:"transparent", color:compareMode?"#fff":S.muted, cursor:"pointer" }}>{compareMode?t.cmpOn:t.cmpOff}</button>
+                  <button onClick={() => { setCompareMode(!compareMode); setResult(null); setCompareItems([]); }} style={{ fontSize:10, padding:"4px 11px", borderRadius:20, border:`1.5px solid ${compareMode?S.accent:S.border}`, background:compareMode?S.accent:"transparent", color:compareMode?"#fff":S.muted, cursor:"pointer" }}>{compareMode?t.cmpOn:t.cmpOff}</button>
                 </div>
                 {!compareMode ? (
                   <>
-                    <div style={{ background:S.tag, border:`1.5px solid ${parseFloat(amount)>0?S.pink:S.border}`, borderRadius:13, padding:13, marginBottom:12 }}>
+                    <div style={{ background:S.tag, border:`1.5px solid ${parseFloat(amount)>0?S.accent:S.border}`, borderRadius:13, padding:13, marginBottom:12 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                        <div style={{ background:S.pink, color:"#fff", padding:"6px 11px", borderRadius:9, fontSize:12, fontWeight:700 }}>{globalCountry?.currency || "--"}</div>
-                        <input type="number" value={amount} onChange={e => { setAmount(e.target.value); setResult(null); }} placeholder="0" style={{ flex:1, background:"none", border:"none", outline:"none", fontSize:32, fontFamily:"Georgia,serif", color:"#ffffff", minWidth:0 }} />
+                        <div style={{ background:S.accent, color:"#fff", padding:"6px 11px", borderRadius:9, fontSize:12, fontWeight:700 }}>{globalCountry?.currency || "--"}</div>
+                        <input type="number" value={amount} onChange={e => { setAmount(e.target.value); setResult(null); }} placeholder="0" style={{ flex:1, background:"none", border:"none", outline:"none", fontSize:32, fontFamily:"Georgia,serif", color:"#1a1a14", minWidth:0 }} />
                       </div>
                       {jpy && parseFloat(amount)>0 && <div style={{ fontSize:12, color:S.muted, marginTop:7, paddingTop:7, borderTop:`1px solid ${S.border}` }}>{t.approx(jpy)}</div>}
                     </div>
-                    <button onClick={runJudge} disabled={!canJudge} style={{ width:"100%", background:canJudge?"linear-gradient(135deg,#ff8c42,#ffb380)":"rgba(255,255,255,0.15)", color:"#fff", border:"1px solid rgba(255,255,255,0.25)", borderRadius:13, padding:15, fontSize:14, fontWeight:700, cursor:canJudge?"pointer":"not-allowed", boxShadow:canJudge?"0 4px 20px rgba(255,140,66,0.4)":"none" }}>{t.judge}</button>
+                    <button onClick={runJudge} disabled={!canJudge} style={{ width:"100%", background:canJudge?S.grad:"#ccc", color:"#fff", border:"none", borderRadius:13, padding:15, fontSize:14, fontWeight:700, cursor:canJudge?"pointer":"not-allowed", boxShadow:canJudge?"0 4px 15px rgba(26,86,160,0.4)":"none" }}>{t.judge}</button>
                   </>
                 ) : (
                   <div>
                     <div style={{ background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:13, padding:13, marginBottom:8 }}>
-                      <input value={cmpName} onChange={e => setCmpName(e.target.value)} placeholder={t.itemPh} style={{ width:"100%", background:"none", border:"none", outline:"none", fontSize:12, color:"#ffffff", marginBottom:8, fontFamily:"inherit" }} />
+                      <input value={cmpName} onChange={e => setCmpName(e.target.value)} placeholder={t.itemPh} style={{ width:"100%", background:"none", border:"none", outline:"none", fontSize:12, color:"#1a1a14", marginBottom:8, fontFamily:"inherit" }} />
                       <div style={{ display:"flex", gap:7, alignItems:"center" }}>
-                        <div style={{ background:S.pink, color:"#fff", padding:"6px 10px", borderRadius:9, fontSize:11, fontWeight:700 }}>{globalCountry?.currency}</div>
-                        <input type="number" value={cmpAmt} onChange={e => setCmpAmt(e.target.value)} placeholder={t.amtPh} style={{ flex:1, background:"none", border:"none", outline:"none", fontSize:24, fontFamily:"Georgia,serif", color:"#ffffff", minWidth:0 }} />
+                        <div style={{ background:S.accent, color:"#fff", padding:"6px 10px", borderRadius:9, fontSize:11, fontWeight:700 }}>{globalCountry?.currency}</div>
+                        <input type="number" value={cmpAmt} onChange={e => setCmpAmt(e.target.value)} placeholder={t.amtPh} style={{ flex:1, background:"none", border:"none", outline:"none", fontSize:24, fontFamily:"Georgia,serif", color:"#1a1a14", minWidth:0 }} />
                         <button onClick={addToCompare} style={{ background:S.accent, color:"#fff", border:"none", borderRadius:9, padding:"8px 12px", fontSize:11, fontWeight:700, cursor:"pointer" }}>{t.add}</button>
                       </div>
                     </div>
                     {compareItems.length>0 && (
-                      <div style={{ background:S.card, border:`1px solid rgba(255,255,255,0.25)`, borderRadius:13, padding:12, marginBottom:8 }}>
+                      <div style={{ background:S.card, border:`1px solid ${S.border}`, borderRadius:13, padding:12, marginBottom:8 }}>
                         {compareItems.map((item,i) => (
                           <div key={i} style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 0", borderBottom:i<compareItems.length-1?`1px solid ${S.border}`:"none" }}>
                             <div style={{ fontSize:20 }}>{item.emoji}</div>
@@ -3864,11 +3127,11 @@ export default function App() {
                 {/* Result */}
                 {result && !compareMode && (
                   <div style={{ marginTop:14 }}>
-                    <div style={{ background:"rgba(255,255,255,0.08)", backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.18)", borderRadius:13, padding:14, marginBottom:10, display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ background:result.bg, borderRadius:13, padding:14, marginBottom:10, display:"flex", alignItems:"center", gap:12 }}>
                       <div style={{ fontSize:42 }}>{result.emoji}</div>
                       <div>
-                        <div style={{ fontSize:24, fontFamily:"Georgia,serif", fontWeight:"bold", color:"#ffffff", textShadow:`0 0 20px ${result.color}` }}>{result.verdict}</div>
-                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.75)", marginTop:2 }}>
+                        <div style={{ fontSize:24, fontFamily:"Georgia,serif", fontWeight:"bold", color:result.color }}>{result.verdict}</div>
+                        <div style={{ fontSize:11, color:S.muted, marginTop:2 }}>
                           {result.verdict===t.cheap?t.cheapD(result.pct):result.verdict===t.exp?t.expD(result.pct):t.normalD}
                         </div>
                       </div>
@@ -3876,12 +3139,14 @@ export default function App() {
                     <div style={{ height:6, background:S.tag, borderRadius:3, marginBottom:12, overflow:"hidden" }}>
                       <div style={{ height:"100%", width:`${result.barPct}%`, background:"linear-gradient(90deg,#006e52,#7a5e00,#b84800)", borderRadius:3, transition:"width 0.8s" }} />
                     </div>
-                    <div style={{ background:"rgba(255,255,255,0.08)", backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.18)", borderLeft:`3px solid ${S.pink}`, borderRadius:9, padding:11, marginBottom:10 }}>
-                      <div style={{ fontSize:9, letterSpacing:2, color:S.pink, fontWeight:800, textTransform:"uppercase", marginBottom:5 }}>{t.priceD}</div>
-                      <div style={{ fontSize:11, lineHeight:1.8, color:"#ffffff" }}>{(() => {
+                    <div style={{ background:"#f6f4f0", borderLeft:`3px solid ${S.accent}`, borderRadius:9, padding:11, marginBottom:10 }}>
+                      <div style={{ fontSize:9, letterSpacing:2, color:S.accent, fontWeight:700, textTransform:"uppercase", marginBottom:5 }}>{t.priceD}</div>
+                      <div style={{ fontSize:11, lineHeight:1.8 }}>{(() => {
                         const r = typeof result.reason === "object" ? (result.reason.en || result.reason.ja || "") : (result.reason || "");
+                        // 日本語が含まれているかチェック（ひらがな・カタカナ・漢字）
                         const hasJapanese = /[ぁ-んァ-ヶー一-龯]/.test(r);
                         if (hasJapanese) {
+                          // 英語の定型文に置き換え
                           return `Typical range: ${result.min.toLocaleString()}〜${result.max.toLocaleString()} ${result.currency} (avg ${result.avg.toLocaleString()}).`;
                         }
                         return r;
@@ -3889,24 +3154,24 @@ export default function App() {
                     </div>
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:6, marginBottom:10 }}>
                       {[[t.avgL,result.avg],[t.minL,result.min],[t.maxL,result.max]].map(([l,v]) => (
-                        <div key={l} style={{ background:"rgba(255,255,255,0.08)", backdropFilter:"blur(12px)", WebkitBackdropFilter:"blur(12px)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:9, padding:"9px 5px", textAlign:"center" }}>
-                          <div style={{ fontSize:9, color:"rgba(255,255,255,0.7)", textTransform:"uppercase", letterSpacing:1, marginBottom:2, fontWeight:600 }}>{l}</div>
-                          <div style={{ fontSize:11, fontFamily:"Georgia,serif", color:"#ffffff", fontWeight:600 }}>{typeof v==="number"?v.toLocaleString():v} {result.currency}</div>
+                        <div key={l} style={{ background:S.tag, borderRadius:9, padding:"9px 5px", textAlign:"center" }}>
+                          <div style={{ fontSize:9, color:S.muted, textTransform:"uppercase", letterSpacing:1, marginBottom:2 }}>{l}</div>
+                          <div style={{ fontSize:11, fontFamily:"Georgia,serif" }}>{typeof v==="number"?v.toLocaleString():v} {result.currency}</div>
                         </div>
                       ))}
                     </div>
-                    <div style={{ display:"inline-flex", alignItems:"center", gap:3, padding:"4px 11px", borderRadius:18, fontSize:10, fontWeight:600, background:result.trend?.includes("+")?"rgba(251,146,60,0.22)":"rgba(255,255,255,0.10)", border:"1px solid rgba(255,255,255,0.18)", color:result.trend?.includes("+")?"#fdba74":"rgba(255,255,255,0.7)" }}>
+                    <div style={{ display:"inline-flex", alignItems:"center", gap:3, padding:"4px 11px", borderRadius:18, fontSize:10, fontWeight:600, background:result.trend?.includes("+")?"#fdeee0":"#edeae4", color:result.trend?.includes("+")?"#b84800":S.muted }}>
                       {result.trend?.includes("+")?t.trendUp(result.trend.replace(/\+/g,"")):t.trendSt(result.trend)}
                     </div>
 
                     {/* 交渉アシスタント */}
                     {result.isExpensive && negotiateCountry && (
-                      <div style={{ marginTop:16, background:"rgba(255,255,255,0.06)", backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"2px solid rgba(255,140,66,0.55)", borderRadius:16, padding:16, boxShadow:"0 4px 24px rgba(255,140,66,0.15)" }}>
-                        <div style={{ fontSize:14, fontWeight:800, color:"#ffb380", marginBottom:4 }}>💬 {t.negotiateTitle}</div>
-                        <div style={{ fontSize:11, color:"rgba(255,255,255,0.85)", marginBottom:14, lineHeight:1.5 }}>{t.negotiateDesc} ({negotiateCountry.flag} {negotiateCountry.localLangName})</div>
+                      <div style={{ marginTop:16, background:"linear-gradient(135deg,#fff7ed,#fef3c7)", border:`2px solid #f59e0b`, borderRadius:16, padding:16 }}>
+                        <div style={{ fontSize:14, fontWeight:800, color:"#92400e", marginBottom:4 }}>💬 {t.negotiateTitle}</div>
+                        <div style={{ fontSize:11, color:"#78350f", marginBottom:14, lineHeight:1.5 }}>{t.negotiateDesc} ({negotiateCountry.flag} {negotiateCountry.localLangName})</div>
                         <div style={{ marginBottom:12 }}>
-                          <div style={{ fontSize:11, color:"#ffb380", fontWeight:700, marginBottom:6 }}>🗣️ {t.negotiateYou}</div>
-                          <textarea value={negYouText} onChange={e => setNegYouText(e.target.value)} placeholder={t.negYouPh} style={{ width:"100%", background:"rgba(255,255,255,0.10)", border:"1.5px solid rgba(255,140,66,0.4)", borderRadius:9, padding:"8px 11px", fontSize:12, fontFamily:"inherit", resize:"vertical", minHeight:54, outline:"none", boxSizing:"border-box", marginBottom:6, color:"#fff" }} />
+                          <div style={{ fontSize:10, color:"#92400e", fontWeight:700, marginBottom:6 }}>🗣️ {t.negotiateYou}</div>
+                          <textarea value={negYouText} onChange={e => setNegYouText(e.target.value)} placeholder={t.negYouPh} style={{ width:"100%", background:"rgba(255,255,255,0.7)", border:"1.5px solid #f59e0b", borderRadius:9, padding:"8px 11px", fontSize:12, fontFamily:"inherit", resize:"vertical", minHeight:54, outline:"none", boxSizing:"border-box", marginBottom:6 }} />
                           <div style={{ display:"flex", gap:6 }}>
                             <div style={{ flex:1 }}>
                               <HoldMicButton
@@ -3916,12 +3181,12 @@ export default function App() {
                                 label={t.transHold}
                               />
                             </div>
-                            <button onClick={handleNegYouSpeak} disabled={negYouTranslating||!negYouText.trim()} style={{ flex:1, padding:"9px", background:negYouTranslating?"rgba(255,255,255,0.15)":"linear-gradient(135deg,#ff8c42,#ffb380)", border:"none", borderRadius:14, fontSize:11, fontWeight:800, cursor:"pointer", color:"#fff", boxShadow: negYouTranslating?"none":"0 4px 14px rgba(255,140,66,0.4)" }}>
+                            <button onClick={handleNegYouSpeak} disabled={negYouTranslating||!negYouText.trim()} style={{ flex:1, padding:"9px", background:negYouTranslating?"#fef3c7":"#f59e0b", border:"none", borderRadius:14, fontSize:11, fontWeight:700, cursor:"pointer", color:"#fff" }}>
                               {negYouTranslating?t.transTranslating:"🌐 "+t.transTranslate}
                             </button>
                           </div>
                           {negYouTranslated && (
-                            <div style={{ marginTop:8, padding:10, background:"rgba(52,211,153,0.20)", border:"1px solid rgba(52,211,153,0.4)", borderRadius:10 }}>
+                            <div style={{ marginTop:8, padding:10, background:"#065f46", borderRadius:10 }}>
                               <div style={{ fontSize:14, fontWeight:700, color:"#fff", marginBottom:6 }}>{negYouTranslated}</div>
                               <div style={{ display:"flex", gap:6 }}>
                                 <button onClick={() => speakText(negYouTranslated, negotiateCountry.localLang)} style={{ flex:1, padding:"7px", background:"rgba(255,255,255,0.15)", border:"1.5px solid rgba(255,255,255,0.3)", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer", color:"#fff" }}>🔊 {t.transSpeak}</button>
@@ -3931,8 +3196,8 @@ export default function App() {
                           )}
                         </div>
                         <div>
-                          <div style={{ fontSize:11, color:"#ffb380", fontWeight:700, marginBottom:6 }}>👂 {t.negotiatePartner}</div>
-                          <textarea value={negPartnerText} onChange={e => setNegPartnerText(e.target.value)} placeholder={`${negotiateCountry.flag} ${negotiateCountry.localLangName}...`} style={{ width:"100%", background:"rgba(255,255,255,0.10)", border:"1.5px solid rgba(255,140,66,0.4)", borderRadius:9, padding:"8px 11px", fontSize:12, fontFamily:"inherit", resize:"vertical", minHeight:54, outline:"none", boxSizing:"border-box", marginBottom:6, color:"#fff" }} />
+                          <div style={{ fontSize:10, color:"#92400e", fontWeight:700, marginBottom:6 }}>👂 {t.negotiatePartner}</div>
+                          <textarea value={negPartnerText} onChange={e => setNegPartnerText(e.target.value)} placeholder={`${negotiateCountry.flag} ${negotiateCountry.localLangName}...`} style={{ width:"100%", background:"rgba(255,255,255,0.7)", border:"1.5px solid #f59e0b", borderRadius:9, padding:"8px 11px", fontSize:12, fontFamily:"inherit", resize:"vertical", minHeight:54, outline:"none", boxSizing:"border-box", marginBottom:6 }} />
                           <div style={{ display:"flex", gap:6 }}>
                             <div style={{ flex:1 }}>
                               <HoldMicButton
@@ -3942,12 +3207,12 @@ export default function App() {
                                 label={t.transHold}
                               />
                             </div>
-                            <button onClick={handleNegPartnerSpeak} disabled={negPartnerTranslating||!negPartnerText.trim()} style={{ flex:1, padding:"9px", background:negPartnerTranslating?"rgba(255,255,255,0.15)":"linear-gradient(135deg,#ff8c42,#ffb380)", border:"none", borderRadius:14, fontSize:11, fontWeight:800, cursor:"pointer", color:"#fff", boxShadow: negPartnerTranslating?"none":"0 4px 14px rgba(255,140,66,0.4)" }}>
+                            <button onClick={handleNegPartnerSpeak} disabled={negPartnerTranslating||!negPartnerText.trim()} style={{ flex:1, padding:"9px", background:negPartnerTranslating?"#fef3c7":"#f59e0b", border:"none", borderRadius:14, fontSize:11, fontWeight:700, cursor:"pointer", color:"#fff" }}>
                               {negPartnerTranslating?t.transTranslating:"🌐 "+t.transTranslate}
                             </button>
                           </div>
                           {negPartnerTranslated && (
-                            <div style={{ marginTop:8, padding:10, background:"rgba(96,176,232,0.20)", border:"1px solid rgba(96,176,232,0.4)", borderRadius:10 }}>
+                            <div style={{ marginTop:8, padding:10, background:"#1a56a0", borderRadius:10 }}>
                               <div style={{ fontSize:14, fontWeight:700, color:"#fff" }}>💬 {negPartnerTranslated}</div>
                             </div>
                           )}
@@ -3956,25 +3221,24 @@ export default function App() {
                     )}
                   </div>
                 )}
-                </>}
               </>}
             </div>
 
             {/* 投稿セクション */}
             {(result||compareItems.length>0) && (
-              <div style={{ margin:"10px 14px 0", background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.18)", borderRadius:15, padding:14, boxShadow:"0 4px 16px rgba(0,0,0,0.2)" }}>
-                <div style={{ fontSize:12, fontWeight:800, color:"#ffffff", marginBottom:2 }}>{t.postT}</div>
-                <div style={{ fontSize:10, color:"rgba(255,255,255,0.6)", marginBottom:10, lineHeight:1.5 }}>{t.postD}</div>
-                <input value={postItem} onChange={e => setPostItem(e.target.value)} placeholder={t.postPh} style={{ width:"100%", background:S.tag, border:`1.5px solid ${postItem?S.pink:S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit", marginBottom:6, boxSizing:"border-box" }} />
+              <div style={{ margin:"10px 14px 0", background:S.card, border:`1.5px solid ${S.border}`, borderRadius:15, padding:14 }}>
+                <div style={{ fontSize:12, fontWeight:700, marginBottom:2 }}>{t.postT}</div>
+                <div style={{ fontSize:10, color:S.muted, marginBottom:10, lineHeight:1.5 }}>{t.postD}</div>
+                <input value={postItem} onChange={e => setPostItem(e.target.value)} placeholder={t.postPh} style={{ width:"100%", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit", marginBottom:6, boxSizing:"border-box" }} />
                 <div style={{ display:"flex", gap:6, marginBottom:6 }}>
-                  <input value={postPrice} onChange={e => setPostPrice(e.target.value)} type="number" placeholder={t.amtPh} style={{ flex:1, background:S.tag, border:`1.5px solid ${postPrice?S.pink:S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit" }} />
+                  <input value={postPrice} onChange={e => setPostPrice(e.target.value)} type="number" placeholder={t.amtPh} style={{ flex:1, background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit" }} />
                 </div>
-                <textarea value={postText} onChange={e => setPostText(e.target.value)} placeholder={t.postComment} style={{ width:"100%", background:S.tag, border:`1.5px solid ${postText?S.pink:S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, fontFamily:"inherit", resize:"vertical", minHeight:60, outline:"none", boxSizing:"border-box", marginBottom:6 }} />
+                <textarea value={postText} onChange={e => setPostText(e.target.value)} placeholder={t.postComment} style={{ width:"100%", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, fontFamily:"inherit", resize:"vertical", minHeight:60, outline:"none", boxSizing:"border-box", marginBottom:6 }} />
                 <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                  <button onClick={() => photoInputRef.current?.click()} style={{ padding:"8px 12px", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, fontSize:11, cursor:"pointer", color:"#fff" }}>📷</button>
+                  <button onClick={() => photoInputRef.current?.click()} style={{ padding:"8px 12px", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, fontSize:11, cursor:"pointer", color:S.muted }}>📷</button>
                   <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} style={{ display:"none" }} />
-                  {postPhotoPreview && <img src={postPhotoPreview} style={{ width:40, height:40, objectFit:"cover", borderRadius:6, border:`1px solid rgba(255,255,255,0.25)` }} />}
-                  <button onClick={submitPost} style={{ flex:1, background:"linear-gradient(135deg,#ec4899,#f472b6)", color:"#fff", border:"none", borderRadius:9, padding:"8px 13px", fontSize:11, fontWeight:800, cursor:"pointer", boxShadow:"0 3px 12px rgba(244,114,182,0.4)" }}>{t.postSv}</button>
+                  {postPhotoPreview && <img src={postPhotoPreview} style={{ width:40, height:40, objectFit:"cover", borderRadius:6, border:`1px solid ${S.border}` }} />}
+                  <button onClick={submitPost} style={{ flex:1, background:S.accent, color:"#fff", border:"none", borderRadius:9, padding:"8px 13px", fontSize:11, fontWeight:700, cursor:"pointer" }}>{t.postSv}</button>
                 </div>
               </div>
             )}
@@ -3983,10 +3247,10 @@ export default function App() {
 
         {/* ══════════ SCAM TAB ══════════ */}
         {tab === "scam" && (
-          <div>
+          <div style={{ background:S.bg, minHeight:"100vh" }}>
             <div style={{ padding:"10px 18px 14px" }}>
-              <div style={{ fontSize:22, color:"#ffb380", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:6, textShadow:"0 2px 10px rgba(0,0,0,0.5), 0 0 30px rgba(255,140,66,0.3)" }}>{t.scamT}</div>
-              <div style={{ fontSize:11, color:"#ffd9b8", fontWeight:600, background:"rgba(255,140,66,0.22)", border:"1px solid rgba(255,140,66,0.4)", display:"inline-block", padding:"3px 11px", borderRadius:18, marginTop:3 }}>{t.scamD}</div>
+              <div style={{ fontSize:22, color:"#10b981", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:4, textShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>{t.scamT}</div>
+              <div style={{ fontSize:11, color:"#047857", fontWeight:600, background:"rgba(16,185,129,0.15)", display:"inline-block", padding:"3px 10px", borderRadius:18, marginTop:3 }}>{t.scamD}</div>
             </div>
             {/* City select */}
             {globalCountry && (() => {
@@ -3994,16 +3258,16 @@ export default function App() {
               const citiesWithData = (globalCountry?.cities?.ja||[]).filter(jaKey => sd?.[jaKey]);
               if (citiesWithData.length===0) return null;
               return (
-                <div style={{ background:"rgba(255,255,255,0.05)", padding:"10px 0 10px 14px", borderTop:`1px solid ${S.border}` }}>
+                <div style={{ background:"#f8f6f2", padding:"10px 0 10px 14px", borderTop:`1px solid ${S.border}` }}>
                   <div style={{ fontSize:9, letterSpacing:2, color:S.muted, textTransform:"uppercase", marginBottom:7, paddingRight:14 }}>🏙️ CITY</div>
                   <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:3, paddingRight:14, scrollbarWidth:"none" }}>
-                    <button onClick={() => setScamCity(null)} style={{ padding:"6px 12px", background:!scamCity?S.pink:S.tag, border:`1.5px solid ${!scamCity?S.pink:S.border}`, borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", color:!scamCity?"#fff":"#ffffff", whiteSpace:"nowrap", flexShrink:0 }}>
+                    <button onClick={() => setScamCity(null)} style={{ padding:"6px 12px", background:!scamCity?S.accent:S.tag, border:`1.5px solid ${!scamCity?S.accent:S.border}`, borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", color:!scamCity?"#fff":"#1a1a14", whiteSpace:"nowrap", flexShrink:0 }}>
                       {t.cityAll}
                     </button>
                     {citiesWithData.map(jaKey => {
                       const idx = (globalCountry?.cities?.ja||[]).indexOf(jaKey);
-                      const label = (globalCountry?.cities?.[lang]||globalCountry?.cities?.ja||[])[idx]||jaKey;
-                      return <button key={jaKey} onClick={() => setScamCity(jaKey)} style={{ padding:"6px 12px", background:scamCity===jaKey?S.pink:S.tag, border:`1.5px solid ${scamCity===jaKey?S.pink:S.border}`, borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", color:scamCity===jaKey?"#fff":"#ffffff", whiteSpace:"nowrap", flexShrink:0 }}>{label}</button>;
+                      const label = (globalCountry?.cities?.en||globalCountry?.cities?.ja||[])[idx]||jaKey;
+                      return <button key={jaKey} onClick={() => setScamCity(jaKey)} style={{ padding:"6px 12px", background:scamCity===jaKey?S.accent:S.tag, border:`1.5px solid ${scamCity===jaKey?S.accent:S.border}`, borderRadius:20, fontSize:11, fontWeight:700, cursor:"pointer", color:scamCity===jaKey?"#fff":"#1a1a14", whiteSpace:"nowrap", flexShrink:0 }}>{label}</button>;
                     })}
                   </div>
                 </div>
@@ -4012,7 +3276,7 @@ export default function App() {
             {/* Scam cards */}
             <div style={{ margin:"10px 14px 0" }}>
               {!globalCountry ? (
-                <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:18, padding:30, textAlign:"center", color:S.muted, boxShadow:"0 2px 12px rgba(0,0,0,0.07)" }}>
+                <div style={{ background:S.card, borderRadius:18, padding:30, textAlign:"center", color:S.muted, boxShadow:"0 2px 12px rgba(0,0,0,0.07)" }}>
                   <div style={{ fontSize:32, marginBottom:10 }}>🛡️</div>
                   <div style={{ fontSize:13 }}>{t.scamSel}</div>
                 </div>
@@ -4021,41 +3285,38 @@ export default function App() {
                 const showCity = scamCity && cityScams.length > 0;
                 const items = showCity ? cityScams : national;
                 if (items.length === 0) return (
-                  <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:18, padding:30, textAlign:"center", color:S.muted }}>
+                  <div style={{ background:S.card, borderRadius:18, padding:30, textAlign:"center", color:S.muted }}>
                     <div style={{ fontSize:13 }}>{t.noPrice}</div>
                   </div>
                 );
                 return (
                   <>
                     {showCity ? (
-                      <div style={{ background:"rgba(244,114,182,0.18)", border:"1px solid rgba(244,114,182,0.4)", borderRadius:11, padding:"9px 13px", marginBottom:10, fontSize:12, color:"#fbcfe8", fontWeight:700 }}>
-                        🏙️ {(() => {
-                          const idx = (globalCountry?.cities?.ja||[]).indexOf(scamCity);
-                          return (globalCountry?.cities?.[lang]||globalCountry?.cities?.ja||[])[idx] || scamCity;
-                        })()}{t.scamCitySpecific}
+                      <div style={{ background:"#fef3c7", borderRadius:11, padding:"8px 12px", marginBottom:10, fontSize:11, color:"#92400e", fontWeight:600 }}>
+                        🏙️ {getCityEN(globalCountry, scamCity)}{t.scamCitySpecific}
                       </div>
                     ) : (
-                      <div style={{ background:"rgba(96,176,232,0.18)", border:"1px solid rgba(96,176,232,0.4)", borderRadius:11, padding:"9px 13px", marginBottom:10, fontSize:12, color:"#a8d9f5", fontWeight:700 }}>
-                        🌍 {globalCountry.label?.[lang] || globalCountry.name} · {t.scamCityHdr2}
+                      <div style={{ background:"#dbeafe", borderRadius:11, padding:"8px 12px", marginBottom:10, fontSize:11, color:"#1e40af", fontWeight:600 }}>
+                        🌍 {globalCountry.label?.en || globalCountry.name} · {t.scamCityHdr2}
                       </div>
                     )}
                     {items.map((s,i) => (
-                      <div key={i} style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.18)", borderRadius:14, padding:14, marginBottom:9, boxShadow:"0 4px 16px rgba(0,0,0,0.2)", borderLeft:`4px solid ${s.level==="high"?"#ef4444":s.level==="med"?"#fbbf24":"#34d399"}` }}>
+                      <div key={i} style={{ background:S.card, borderRadius:14, padding:14, marginBottom:9, boxShadow:"0 2px 10px rgba(0,0,0,0.07)", borderLeft:`4px solid ${s.level==="high"?"#c05000":s.level==="med"?"#8a6800":"#595550"}` }}>
                         <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
                           <div style={{ fontSize:24, flexShrink:0 }}>{s.icon}</div>
                           <div style={{ flex:1 }}>
                             <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:5, flexWrap:"wrap" }}>
-                              <div style={{ fontSize:13, fontWeight:800, color:"#ffffff" }}>{s.title[lang]||s.title.ja||s.title.en}</div>
-                              <div style={{ fontSize:10, padding:"3px 10px", borderRadius:18, fontWeight:800, background:s.level==="high"?"rgba(239,68,68,0.18)":s.level==="med"?"rgba(251,191,36,0.18)":"rgba(52,211,153,0.18)", border:`1px solid ${s.level==="high"?"rgba(239,68,68,0.5)":s.level==="med"?"rgba(251,191,36,0.5)":"rgba(52,211,153,0.5)"}`, color:s.level==="high"?"#fca5a5":s.level==="med"?"#fde68a":"#6ee7b7" }}>
-                                {s.level==="high"?"🔴 "+t.lH:s.level==="med"?"🟡 "+t.lM:"🟢 "+t.lL}
+                              <div style={{ fontSize:13, fontWeight:700 }}>{s.title[lang]||s.title.ja||s.title.en}</div>
+                              <div style={{ fontSize:10, padding:"2px 8px", borderRadius:18, fontWeight:700, background:s.level==="high"?"#fdeee0":s.level==="med"?"#fdf6d8":"#edeae4", color:s.level==="high"?"#c05000":s.level==="med"?"#8a6800":"#595550" }}>
+                                {s.level==="high"?t.lH:s.level==="med"?t.lM:t.lL}
                               </div>
                             </div>
-                            <div style={{ fontSize:12, color:"rgba(255,255,255,0.88)", lineHeight:1.75 }}>{s.desc[lang]||s.desc.ja||s.desc.en}</div>
+                            <div style={{ fontSize:12, color:"#333", lineHeight:1.75 }}>{s.desc[lang]||s.desc.ja||s.desc.en}</div>
                           </div>
                         </div>
                       </div>
                     ))}
-                    <div style={{ background:"rgba(96,176,232,0.15)", border:"1px solid rgba(96,176,232,0.35)", borderRadius:11, padding:11, marginBottom:14, fontSize:11, color:"#a8d9f5", lineHeight:1.75, fontWeight:600 }}>{t.scamNote}</div>
+                    <div style={{ background:"#deeeff", borderRadius:11, padding:11, marginBottom:14, fontSize:11, color:"#003f7a", lineHeight:1.75, fontWeight:600 }}>{t.scamNote}</div>
                   </>
                 );
               })()}
@@ -4065,29 +3326,29 @@ export default function App() {
 
         {/* ══════════ TRANSLATE TAB ══════════ */}
         {tab === "trans" && (
-          <div>
+          <div style={{ background:S.bg, minHeight:"100vh" }}>
             <div style={{ padding:"10px 18px 14px" }}>
-              <div style={{ fontSize:22, color:"#ffb380", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:6, textShadow:"0 2px 10px rgba(0,0,0,0.5), 0 0 30px rgba(255,140,66,0.3)" }}>{t.transT}</div>
-              <div style={{ fontSize:11, color:"#ffd9b8", fontWeight:600, background:"rgba(255,140,66,0.22)", border:"1px solid rgba(255,140,66,0.4)", display:"inline-block", padding:"3px 11px", borderRadius:18, marginTop:3 }}>{t.transD}</div>
+              <div style={{ fontSize:22, color:"#10b981", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:4, textShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>{t.transT}</div>
+              <div style={{ fontSize:11, color:"#047857", fontWeight:600, background:"rgba(16,185,129,0.15)", display:"inline-block", padding:"3px 10px", borderRadius:18, marginTop:3 }}>{t.transD}</div>
             </div>
             <div style={{ margin:"10px 14px 0" }}>
               {!globalCountry ? (
-                <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:18, padding:30, textAlign:"center", color:S.muted }}>
+                <div style={{ background:S.card, borderRadius:18, padding:30, textAlign:"center", color:S.muted }}>
                   <div style={{ fontSize:32, marginBottom:10 }}>🌐</div>
                   <div style={{ fontSize:13 }}>{t.transSelCountry}</div>
                 </div>
               ) : (
                 <>
                   {/* 言語インジケーター */}
-                  <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:11, padding:"9px 13px", marginBottom:10, display:"flex", alignItems:"center", gap:8, border:"1px solid rgba(255,255,255,0.18)" }}>
+                  <div style={{ background:S.card, borderRadius:11, padding:"9px 13px", marginBottom:10, display:"flex", alignItems:"center", gap:8, border:`1px solid ${S.border}` }}>
                     <span style={{ fontSize:18 }}>{globalCountry.flag}</span>
-                    <span style={{ fontSize:12, color:"#ffb380", fontWeight:700 }}>{globalCountry.localLangName}</span>
-                    <span style={{ marginLeft:"auto", fontSize:10, color:"rgba(255,255,255,0.6)" }}>🌐 AI Translate</span>
+                    <span style={{ fontSize:11, color:S.accent, fontWeight:700 }}>{globalCountry.localLangName}</span>
+                    <span style={{ marginLeft:"auto", fontSize:10, color:S.muted }}>Anthropic AI翻訳</span>
                   </div>
 
                   {/* あなた → 現地語 */}
-                  <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
-                    <div style={{ fontSize:13, fontWeight:800, color:"#ffb380", marginBottom:10, letterSpacing:0.3 }}>🗣️ {getLangDisplayName(lang, lang)} → {getLangDisplayName(globalCountry.localLang, lang)}</div>
+                  <div style={{ background:S.card, borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:S.accent, marginBottom:10, letterSpacing:0.5 }}>🗣️ {t.transYou}</div>
                     <textarea
                       value={youText}
                       onChange={e => setYouText(e.target.value)}
@@ -4103,12 +3364,12 @@ export default function App() {
                           label={t.transHold}
                         />
                       </div>
-                      <button onClick={handleYouSpeak} disabled={youTranslating||!youText.trim()} style={{ flex:1, padding:"11px", background:youTranslating?"rgba(255,255,255,0.15)":"linear-gradient(135deg,#ff8c42,#ffb380)", border:"none", borderRadius:14, fontSize:12, fontWeight:800, cursor:"pointer", color:"#fff", boxShadow: youTranslating?"none":"0 4px 16px rgba(255,140,66,0.4)" }}>
+                      <button onClick={handleYouSpeak} disabled={youTranslating||!youText.trim()} style={{ flex:1, padding:"11px", background:youTranslating?"#fef3c7":S.accentLight, border:"none", borderRadius:14, fontSize:12, fontWeight:700, cursor:"pointer", color:"#fff" }}>
                         {youTranslating ? t.transTranslating : "🌐 "+t.transTranslate}
                       </button>
                     </div>
                     {youTranslated && (
-                      <div style={{ padding:14, background:"rgba(52,211,153,0.25)", borderRadius:12 }}>
+                      <div style={{ padding:14, background:"#065f46", borderRadius:12 }}>
                         <div style={{ fontSize:16, fontWeight:700, color:"#fff", marginBottom:8, lineHeight:1.5 }}>{globalCountry.flag} {youTranslated}</div>
                         <div style={{ display:"flex", gap:7 }}>
                           <button onClick={() => speakText(youTranslated, globalCountry.localLang)} style={{ flex:1, padding:"8px", background:"rgba(255,255,255,0.15)", border:"1.5px solid rgba(255,255,255,0.3)", borderRadius:9, fontSize:11, fontWeight:700, cursor:"pointer", color:"#fff" }}>🔊 {t.transSpeak}</button>
@@ -4119,8 +3380,8 @@ export default function App() {
                   </div>
 
                   {/* 相手 → あなたの言語 */}
-                  <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
-                    <div style={{ fontSize:13, fontWeight:800, color:"#ffb380", marginBottom:10, letterSpacing:0.3 }}>👂 {getLangDisplayName(globalCountry.localLang, lang)} → {getLangDisplayName(lang, lang)}</div>
+                  <div style={{ background:S.card, borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:"#b84800", marginBottom:10, letterSpacing:0.5 }}>👂 {t.transPartner}</div>
                     <textarea
                       value={partnerText}
                       onChange={e => setPartnerText(e.target.value)}
@@ -4136,20 +3397,20 @@ export default function App() {
                           label={t.transHold}
                         />
                       </div>
-                      <button onClick={handlePartnerSpeak} disabled={partnerTranslating||!partnerText.trim()} style={{ flex:1, padding:"11px", background:partnerTranslating?"rgba(255,255,255,0.15)":"linear-gradient(135deg,#ff8c42,#ffb380)", border:"none", borderRadius:14, fontSize:12, fontWeight:800, cursor:"pointer", color:"#fff", boxShadow: partnerTranslating?"none":"0 4px 16px rgba(255,140,66,0.4)" }}>
+                      <button onClick={handlePartnerSpeak} disabled={partnerTranslating||!partnerText.trim()} style={{ flex:1, padding:"11px", background:partnerTranslating?"#fef3c7":"#b84800", border:"none", borderRadius:14, fontSize:12, fontWeight:700, cursor:"pointer", color:"#fff" }}>
                         {partnerTranslating ? t.transTranslating : "🌐 "+t.transTranslate}
                       </button>
                     </div>
                     {partnerTranslated && (
-                      <div style={{ padding:14, background:"rgba(96,176,232,0.30)", borderRadius:12 }}>
+                      <div style={{ padding:14, background:"#1a56a0", borderRadius:12 }}>
                         <div style={{ fontSize:16, fontWeight:700, color:"#fff", lineHeight:1.5 }}>💬 {partnerTranslated}</div>
                       </div>
                     )}
                   </div>
 
                   {/* 固定緊急フレーズ - メイン:選択言語、サブ:旅行先言語、音声:旅行先言語 */}
-                  <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
-                    <div style={{ fontSize:12, fontWeight:800, color:"#ffb380", marginBottom:6 }}>{t.transFixed}</div>
+                  <div style={{ background:S.card, borderRadius:16, padding:16, marginBottom:12, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:"#c05000", marginBottom:6 }}>{t.transFixed}</div>
                     <div style={{ fontSize:10, color:S.muted, marginBottom:10, lineHeight:1.5 }}>{t.speakHintHdr}</div>
                     {FIXED_PHRASES.map((p,i) => {
                       const localLangCode = globalCountry.localLang || "en";
@@ -4161,10 +3422,10 @@ export default function App() {
                         <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderBottom:i<FIXED_PHRASES.length-1?`1px solid ${S.border}`:"none" }}>
                           <div style={{ fontSize:20, flexShrink:0 }}>{p.emoji}</div>
                           <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontSize:12, fontWeight:700, color:"#ffffff" }}>{userText}</div>
-                            <div style={{ fontSize:11, color:S.pink, marginTop:2, fontWeight:600 }}>{globalCountry.flag} {localText}</div>
+                            <div style={{ fontSize:12, fontWeight:700, color:"#1a1a14" }}>{userText}</div>
+                            <div style={{ fontSize:11, color:S.accent, marginTop:2, fontWeight:600 }}>{globalCountry.flag} {localText}</div>
                           </div>
-                          <button onClick={() => speakText(localText, localLangCode)} style={{ padding:"8px 12px", background:S.pink, border:"none", borderRadius:9, fontSize:13, cursor:"pointer", flexShrink:0, color:"#fff", boxShadow:"0 2px 10px rgba(244,114,182,0.4)" }}>🔊</button>
+                          <button onClick={() => speakText(localText, localLangCode)} style={{ padding:"8px 12px", background:S.accentLight, border:"none", borderRadius:9, fontSize:13, cursor:"pointer", flexShrink:0, color:"#fff" }}>🔊</button>
                         </div>
                       );
                     })}
@@ -4179,13 +3440,13 @@ export default function App() {
         {tab === "travel" && (
           <div>
             <div style={{ padding:"10px 18px 14px" }}>
-              <div style={{ fontSize:22, color:"#ffb380", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:6, textShadow:"0 2px 10px rgba(0,0,0,0.5), 0 0 30px rgba(255,140,66,0.3)" }}>{t.travT}</div>
-              <div style={{ fontSize:11, color:"#ffd9b8", fontWeight:600, background:"rgba(255,140,66,0.22)", border:"1px solid rgba(255,140,66,0.4)", display:"inline-block", padding:"3px 11px", borderRadius:18, marginTop:3 }}>{t.travD}</div>
+              <div style={{ fontSize:22, color:"#10b981", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:4, textShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>{t.travT}</div>
+              <div style={{ fontSize:11, color:"#047857", fontWeight:600, background:"rgba(16,185,129,0.15)", display:"inline-block", padding:"3px 10px", borderRadius:18, marginTop:3 }}>{t.travD}</div>
             </div>
-            <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", padding:"12px 0 12px 14px", boxShadow:"0 2px 8px rgba(0,0,0,0.08)" }}>
+            <div style={{ background:S.card, padding:"12px 0 12px 14px", boxShadow:"0 2px 8px rgba(0,0,0,0.08)" }}>
               <div style={{ display:"flex", gap:7, overflowX:"auto", paddingBottom:3, paddingRight:14, scrollbarWidth:"none" }}>
                 {LINK_CATS.map(cat => (
-                  <button key={cat} onClick={() => setLinkCat(cat)} style={{ padding:"7px 15px", background:linkCat===cat?S.pink:S.tag, border:`2px solid ${linkCat===cat?S.pink:S.border}`, borderRadius:22, fontSize:12, fontWeight:linkCat===cat?700:500, cursor:"pointer", color:linkCat===cat?"#fff":"#1a1a1a", whiteSpace:"nowrap", flexShrink:0 }}>{cat}</button>
+                  <button key={cat} onClick={() => setLinkCat(cat)} style={{ padding:"7px 15px", background:linkCat===cat?S.accent:S.tag, border:`2px solid ${linkCat===cat?S.accent:S.border}`, borderRadius:22, fontSize:12, fontWeight:linkCat===cat?700:500, cursor:"pointer", color:linkCat===cat?"#fff":"#1a1a1a", whiteSpace:"nowrap", flexShrink:0 }}>{cat}</button>
                 ))}
               </div>
             </div>
@@ -4193,18 +3454,18 @@ export default function App() {
               {TRAVEL_LINKS.filter(l => l.cat===linkCat).map((l,i) => {
                 const linkUrl = (typeof l.urls === "object" ? (l.urls[lang] || l.urls.en || l.urls.ja) : l.url);
                 return (
-                <a key={i} href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ display:"block", textDecoration:"none", background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", borderRadius:14, padding:14, marginBottom:9, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
+                <a key={i} href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ display:"block", textDecoration:"none", background:S.card, borderRadius:14, padding:14, marginBottom:9, boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
                   <div style={{ display:"flex", alignItems:"center", gap:11 }}>
                     <div style={{ width:38, height:38, borderRadius:9, background:l.color, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, color:"#fff", flexShrink:0 }}>{l.cat}</div>
                     <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13, fontWeight:700, color:"#ffffff", marginBottom:2 }}>{typeof l.label==="object"?(l.label[lang]||l.label.ja||l.label.en):l.label}</div>
+                      <div style={{ fontSize:13, fontWeight:700, color:"#1a1a14", marginBottom:2 }}>{typeof l.label==="object"?(l.label[lang]||l.label.ja||l.label.en):l.label}</div>
                       <div style={{ fontSize:10, color:S.muted }}>{typeof l.desc==="object"?(l.desc[lang]||l.desc.ja||l.desc.en):l.desc}</div>
                     </div>
                     <div style={{ fontSize:15, color:S.border }}>›</div>
                   </div>
                 </a>
               );})}
-              <div style={{ background:"rgba(255,255,255,0.08)", backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:11, padding:11, marginBottom:14, fontSize:11, color:"#ffffff", lineHeight:1.7, fontWeight:600 }}>🔒 {t.travNote}</div>
+              <div style={{ background:"rgba(26,86,160,0.07)", borderRadius:11, padding:11, marginBottom:14, fontSize:10, color:S.accent, lineHeight:1.7, fontWeight:600 }}>🔒 {t.travNote}</div>
             </div>
           </div>
         )}
@@ -4213,23 +3474,23 @@ export default function App() {
         {tab === "trend" && (
           <div>
             <div style={{ padding:"10px 18px 14px" }}>
-              <div style={{ fontSize:22, color:"#ffb380", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:6, textShadow:"0 2px 10px rgba(0,0,0,0.5), 0 0 30px rgba(255,140,66,0.3)" }}>{t.trendT}</div>
-              <div style={{ fontSize:11, color:"#ffd9b8", fontWeight:600, background:"rgba(255,140,66,0.22)", border:"1px solid rgba(255,140,66,0.4)", display:"inline-block", padding:"3px 11px", borderRadius:18, marginTop:3 }}>{t.trendD}</div>
+              <div style={{ fontSize:22, color:"#10b981", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:4, textShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>{t.trendT}</div>
+              <div style={{ fontSize:11, color:"#047857", fontWeight:600, background:"rgba(16,185,129,0.15)", display:"inline-block", padding:"3px 10px", borderRadius:18, marginTop:3 }}>{t.trendD}</div>
             </div>
             <div style={{ margin:"0 14px" }}>
               {TREND_DATA.map((td,i) => (
-                <div key={i} style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.18)", borderRadius:16, padding:16, marginBottom:9, boxShadow:"0 4px 16px rgba(0,0,0,0.2)" }}>
+                <div key={i} style={{ background:S.card, borderRadius:16, padding:16, marginBottom:9, boxShadow:"0 2px 8px rgba(0,0,0,0.06)" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
                     <div>
-                      <div style={{ fontFamily:"Georgia,serif", fontSize:15, fontWeight:"bold", color:"#ffffff" }}>{typeof td.city==="object"?(td.city[lang]||td.city.ja||td.city.en):td.city}</div>
-                      <div style={{ fontSize:11, color:"rgba(255,255,255,0.7)", marginTop:2 }}>{typeof td.item==="object"?(td.item[lang]||td.item.ja||td.item.en):td.item}</div>
+                      <div style={{ fontFamily:"Georgia,serif", fontSize:14, fontWeight:"bold" }}>{typeof td.city==="object"?(td.city.en||td.city.ja):td.city}</div>
+                      <div style={{ fontSize:10, color:S.muted, marginTop:2 }}>{typeof td.item==="object"?(td.item[lang]||td.item.ja||td.item.en):td.item}</div>
                     </div>
-                    <div style={{ padding:"3px 10px", borderRadius:18, fontSize:11, fontWeight:800, background:"rgba(251,146,60,0.25)", border:"1px solid rgba(251,146,60,0.4)", color:"#fdba74" }}>↑ {td.pct}</div>
+                    <div style={{ padding:"3px 9px", borderRadius:18, fontSize:10, fontWeight:700, background:"#fdeee0", color:"#b84800" }}>↑ {td.pct}</div>
                   </div>
-                  <div style={{ height:5, background:"rgba(255,255,255,0.12)", borderRadius:3, marginBottom:7, overflow:"hidden" }}>
-                    <div style={{ height:"100%", width:`${td.barW}%`, background:"linear-gradient(90deg,#34d399,#fbbf24,#fb923c)", borderRadius:3 }} />
+                  <div style={{ height:4, background:S.tag, borderRadius:2, marginBottom:6, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${td.barW}%`, background:"linear-gradient(90deg,#006e52,#7a5e00,#b84800)", borderRadius:2 }} />
                   </div>
-                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"rgba(255,255,255,0.85)", fontWeight:600 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:S.muted }}>
                     <span>{t.prev}: {td.old}</span><span>{t.now}: {td.now}</span>
                   </div>
                 </div>
@@ -4242,49 +3503,49 @@ export default function App() {
         {tab === "db" && (
           <div>
             <div style={{ padding:"10px 18px 14px" }}>
-              <div style={{ fontSize:22, color:"#ffb380", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:6, textShadow:"0 2px 10px rgba(0,0,0,0.5), 0 0 30px rgba(255,140,66,0.3)" }}>{t.dbT}</div>
-              <div style={{ fontSize:11, color:"#ffd9b8", fontWeight:600, background:"rgba(255,140,66,0.22)", border:"1px solid rgba(255,140,66,0.4)", display:"inline-block", padding:"3px 11px", borderRadius:18, marginTop:3 }}>{t.dbD}</div>
+              <div style={{ fontSize:22, color:"#10b981", fontFamily:"Georgia,serif", fontWeight:"bold", marginBottom:4, textShadow:"0 2px 8px rgba(0,0,0,0.15)" }}>{t.dbT}</div>
+              <div style={{ fontSize:11, color:"#047857", fontWeight:600, background:"rgba(16,185,129,0.15)", display:"inline-block", padding:"3px 10px", borderRadius:18, marginTop:3 }}>{t.dbD}</div>
             </div>
 
             {/* 投稿フォーム（Twitter風） */}
-            <div style={{ margin:"0 14px 10px", background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.18)", borderRadius:16, padding:16, boxShadow:"0 4px 16px rgba(0,0,0,0.2)" }}>
-              <div style={{ fontSize:12, fontWeight:800, color:"#ffb380", marginBottom:10 }}>✏️ {t.postPostBtn}</div>
-              <input value={postItem} onChange={e => setPostItem(e.target.value)} placeholder={t.postPh} style={{ width:"100%", background:S.tag, border:`1.5px solid ${postItem?S.pink:S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit", marginBottom:6, boxSizing:"border-box" }} />
+            <div style={{ margin:"0 14px 10px", background:S.card, borderRadius:16, padding:16, boxShadow:"0 2px 12px rgba(0,0,0,0.08)" }}>
+              <div style={{ fontSize:12, fontWeight:700, color:S.accent, marginBottom:10 }}>✏️ {t.postPostBtn}</div>
+              <input value={postItem} onChange={e => setPostItem(e.target.value)} placeholder={t.postPh} style={{ width:"100%", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit", marginBottom:6, boxSizing:"border-box" }} />
               <div style={{ display:"flex", gap:6, marginBottom:6 }}>
-                <div style={{ background:S.pink, color:"#fff", padding:"7px 11px", borderRadius:9, fontSize:11, fontWeight:700, flexShrink:0, boxShadow:"0 2px 8px rgba(244,114,182,0.35)" }}>{globalCountry?.currency || "---"}</div>
-                <input value={postPrice} onChange={e => setPostPrice(e.target.value)} type="number" placeholder={t.amtPh} style={{ flex:1, background:S.tag, border:`1.5px solid ${postPrice?S.pink:S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit" }} />
+                <div style={{ background:S.accent, color:"#fff", padding:"7px 11px", borderRadius:9, fontSize:11, fontWeight:700, flexShrink:0 }}>{globalCountry?.currency || "---"}</div>
+                <input value={postPrice} onChange={e => setPostPrice(e.target.value)} type="number" placeholder={t.amtPh} style={{ flex:1, background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, outline:"none", fontFamily:"inherit" }} />
               </div>
-              <textarea value={postText} onChange={e => setPostText(e.target.value)} placeholder={t.postComment} style={{ width:"100%", background:S.tag, border:`1.5px solid ${postText?S.pink:S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, fontFamily:"inherit", resize:"vertical", minHeight:70, outline:"none", boxSizing:"border-box", marginBottom:8 }} />
+              <textarea value={postText} onChange={e => setPostText(e.target.value)} placeholder={t.postComment} style={{ width:"100%", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:9, padding:"8px 11px", fontSize:11, fontFamily:"inherit", resize:"vertical", minHeight:70, outline:"none", boxSizing:"border-box", marginBottom:8 }} />
               {postPhotoPreview && (
                 <div style={{ marginBottom:8, position:"relative", display:"inline-block" }}>
-                  <img src={postPhotoPreview} style={{ maxWidth:"100%", maxHeight:200, borderRadius:10, border:`1px solid rgba(255,255,255,0.25)` }} />
+                  <img src={postPhotoPreview} style={{ maxWidth:"100%", maxHeight:200, borderRadius:10, border:`1px solid ${S.border}` }} />
                   <button onClick={() => { setPostPhoto(null); setPostPhotoPreview(null); }} style={{ position:"absolute", top:4, right:4, width:22, height:22, borderRadius:"50%", background:"rgba(0,0,0,0.6)", border:"none", color:"#fff", cursor:"pointer", fontSize:12, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
                 </div>
               )}
               <div style={{ display:"flex", gap:7, alignItems:"center" }}>
-                <button onClick={() => photoInputRef.current?.click()} style={{ padding:"9px 14px", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:10, fontSize:12, cursor:"pointer", color:"#fff", display:"flex", alignItems:"center", gap:5 }}>📷 {t.postPhoto}</button>
+                <button onClick={() => photoInputRef.current?.click()} style={{ padding:"9px 14px", background:S.tag, border:`1.5px solid ${S.border}`, borderRadius:10, fontSize:12, cursor:"pointer", color:S.muted, display:"flex", alignItems:"center", gap:5 }}>📷 {t.postPhoto}</button>
                 <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} style={{ display:"none" }} />
-                <button onClick={submitPost} style={{ flex:1, background:"linear-gradient(135deg,#ec4899,#f472b6)", color:"#fff", border:"none", borderRadius:10, padding:"9px 13px", fontSize:12, fontWeight:800, cursor:"pointer", boxShadow:"0 4px 14px rgba(244,114,182,0.4)" }}>{t.postSv}</button>
+                <button onClick={submitPost} style={{ flex:1, background:S.accent, color:"#fff", border:"none", borderRadius:10, padding:"9px 13px", fontSize:12, fontWeight:700, cursor:"pointer" }}>{t.postSv}</button>
               </div>
             </div>
 
             {/* 投稿一覧 */}
             <div style={{ margin:"0 14px" }}>
               {posts.length===0 ? (
-                <div style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:18, padding:34, textAlign:"center", color:"rgba(255,255,255,0.7)" }}>
+                <div style={{ background:S.card, borderRadius:18, padding:34, textAlign:"center", color:S.muted }}>
                   <div style={{ fontSize:34, marginBottom:10 }}>🏪</div>
                   <div style={{ fontSize:13 }}>{t.dbE}</div>
                 </div>
               ) : posts.map((p,i) => (
-                <div key={i} style={{ background:S.card, backdropFilter:"blur(14px) saturate(140%)", WebkitBackdropFilter:"blur(14px) saturate(140%)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:14, padding:14, marginBottom:10, boxShadow:"0 2px 10px rgba(0,0,0,0.2)" }}>
+                <div key={i} style={{ background:S.card, borderRadius:14, padding:14, marginBottom:10, boxShadow:"0 2px 6px rgba(0,0,0,0.05)" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:p.text||p.photo?8:0 }}>
                     <div>
-                      {p.item && <div style={{ fontSize:13, fontWeight:700, color:"#ffffff" }}>{p.item}</div>}
-                      <div style={{ fontSize:10, color:"rgba(255,255,255,0.6)", marginTop:2 }}>{p.city} · {p.time}</div>
+                      {p.item && <div style={{ fontSize:13, fontWeight:700 }}>{p.item}</div>}
+                      <div style={{ fontSize:10, color:S.muted, marginTop:2 }}>{p.city} · {p.time}</div>
                     </div>
-                    {p.price && <div style={{ fontFamily:"Georgia,serif", fontSize:15, color:S.pink, fontWeight:800, flexShrink:0, textShadow:"0 0 12px rgba(244,114,182,0.5)" }}>{parseFloat(p.price).toLocaleString()} {p.currency}</div>}
+                    {p.price && <div style={{ fontFamily:"Georgia,serif", fontSize:15, color:S.accent, fontWeight:700, flexShrink:0 }}>{parseFloat(p.price).toLocaleString()} {p.currency}</div>}
                   </div>
-                  {p.text && <div style={{ fontSize:12, color:"rgba(255,255,255,0.85)", lineHeight:1.6, marginBottom:p.photo?8:0 }}>{p.text}</div>}
+                  {p.text && <div style={{ fontSize:12, color:"#333", lineHeight:1.6, marginBottom:p.photo?8:0 }}>{p.text}</div>}
                   {p.photo && <img src={p.photo} style={{ width:"100%", borderRadius:10, maxHeight:200, objectFit:"cover" }} />}
                 </div>
               ))}
@@ -4295,7 +3556,7 @@ export default function App() {
       </div>
 
       {/* ── BOTTOM NAV ── */}
-      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:860, background:"rgba(10,26,46,0.75)", backdropFilter:"blur(20px) saturate(160%)", WebkitBackdropFilter:"blur(20px) saturate(160%)", borderTop:"1px solid rgba(255,255,255,0.15)", display:"flex", zIndex:100 }}>
+      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:860, background:"rgba(255,255,255,0.97)", backdropFilter:"blur(20px)", borderTop:`1px solid ${S.border}`, display:"flex", zIndex:100 }}>
         {[
           ["check","🔍",t.tabC],
           ["scam","⚠️",t.tabS],
@@ -4304,8 +3565,8 @@ export default function App() {
           ["trend","📊",t.tabTd],
           ["db","🗄️",t.tabD],
         ].map(([id,icon,label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ flex:1, padding:"11px 0 7px", textAlign:"center", cursor:"pointer", color:tab===id?"#ffb380":"rgba(255,255,255,0.65)", fontSize:9, fontFamily:"inherit", letterSpacing:0.2, border:"none", background:"none", fontWeight:tab===id?800:500 }}>
-            <div style={{ fontSize:18, marginBottom:2, filter: tab===id?"drop-shadow(0 0 8px rgba(255,179,128,0.6))":"none" }}>{icon}</div>{label}
+          <button key={id} onClick={() => setTab(id)} style={{ flex:1, padding:"11px 0 7px", textAlign:"center", cursor:"pointer", color:tab===id?S.accent:S.muted, fontSize:8, fontFamily:"inherit", letterSpacing:0.2, border:"none", background:"none", fontWeight:tab===id?700:400 }}>
+            <div style={{ fontSize:16, marginBottom:2 }}>{icon}</div>{label}
           </button>
         ))}
       </div>
@@ -4323,23 +3584,23 @@ export default function App() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position:"fixed", bottom:95, left:"50%", transform:"translateX(-50%)", background:"linear-gradient(135deg,#ec4899,#f472b6)", color:"#fff", padding:"10px 20px", borderRadius:24, fontSize:12, fontWeight:700, zIndex:200, whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(244,114,182,0.5)" }}>{toast}</div>
+        <div style={{ position:"fixed", bottom:95, left:"50%", transform:"translateX(-50%)", background:S.accent, color:"#fff", padding:"10px 20px", borderRadius:24, fontSize:12, fontWeight:600, zIndex:200, whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(26,86,160,0.5)" }}>{toast}</div>
       )}
 
       {/* 設定モーダル */}
       {showSettings && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)", zIndex:300, display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={() => setShowSettings(false)}>
-          <div style={{ background:"rgba(20,40,70,0.85)", backdropFilter:"blur(24px) saturate(160%)", WebkitBackdropFilter:"blur(24px) saturate(160%)", borderRadius:"20px 20px 0 0", padding:24, width:"100%", maxWidth:860, maxHeight:"75vh", overflowY:"auto", borderTop:"1px solid rgba(255,255,255,0.18)" }} onClick={e => e.stopPropagation()}>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:300, display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={() => setShowSettings(false)}>
+          <div style={{ background:"#fff", borderRadius:"20px 20px 0 0", padding:24, width:"100%", maxWidth:860, maxHeight:"75vh", overflowY:"auto" }} onClick={e => e.stopPropagation()}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-              <div style={{ fontSize:17, fontWeight:800, color:"#ffffff" }}>{t.settingsTitle}</div>
-              <button onClick={() => setShowSettings(false)} style={{ background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", fontSize:16, cursor:"pointer", color:"#ffffff", width:32, height:32, borderRadius:"50%" }}>✕</button>
+              <div style={{ fontSize:17, fontWeight:800, color:"#1a1a14" }}>{t.settingsTitle}</div>
+              <button onClick={() => setShowSettings(false)} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:S.muted }}>✕</button>
             </div>
             {Object.entries(hText).map(([key, text]) => (
-              <div key={key} style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:12, padding:"12px 14px", marginBottom:8 }}>
-                <div style={{ fontSize:12, lineHeight:1.7, color:"rgba(255,255,255,0.9)" }}>{text}</div>
+              <div key={key} style={{ background:S.tag, borderRadius:12, padding:"12px 14px", marginBottom:8 }}>
+                <div style={{ fontSize:12, lineHeight:1.7, color:"#333" }}>{text}</div>
               </div>
             ))}
-            <div style={{ marginTop:12, padding:"10px 14px", background:"rgba(255,179,128,0.15)", border:"1px solid rgba(255,179,128,0.3)", borderRadius:12, fontSize:11, color:"#ffd9b8", lineHeight:1.6 }}>
+            <div style={{ marginTop:12, padding:"10px 14px", background:"#deeeff", borderRadius:12, fontSize:11, color:"#003f7a", lineHeight:1.6 }}>
               {t.settingsNote}
             </div>
           </div>
