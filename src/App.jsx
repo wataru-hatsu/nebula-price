@@ -623,11 +623,12 @@ const T = {
 };
 
 const FALLBACK_RATES = {
-  THB:0.0043, KRW:0.011, USD:155, JPY:1, SGD:115, EUR:168,
-  AUD:100, MYR:34, IDR:0.0096, PHP:2.7, TWD:4.8, GBP:197,
-  VND:0.006, INR:1.85, BRL:30, MXN:8.5, AED:42, ZAR:8.5,
-  CAD:114, HKD:20, NZD:92, CNY:21, EGP:3.2, TRY:4.5,
-  SAR:41, NOK:14, SEK:14, CHF:175, RUB:1.7,
+  THB:4.7, KRW:0.107, USD:156, JPY:1, SGD:117, EUR:184,
+  AUD:100, MYR:35, IDR:0.0090, PHP:2.7, TWD:4.8, GBP:212,
+  VND:0.006, INR:1.85, BRL:32, MXN:9, AED:42, ZAR:8.5,
+  CAD:114, HKD:20, NZD:93, CNY:21, EGP:3.1, TRY:3.5,
+  SAR:41, NOK:15, SEK:15, CHF:190, RUB:2.1, ARS:0.11,
+  MNT:0.045, MVR:10, LAK:0.0072, KHR:0.038,
 };
 
 async function fetchRates() {
@@ -11567,6 +11568,35 @@ export default function App() {
 
   const jpy = globalCountry && amount && globalCountry.currency !== "JPY"
     ? Math.round(parseFloat(amount) * getRate(globalCountry.currency)).toLocaleString() : null;
+
+  // 多通貨換算表示：選択言語に応じた母国通貨＋USD（必ず）の換算
+  const displayConversion = () => {
+    if (!globalCountry || !amount || parseFloat(amount) <= 0) return null;
+    const localCur = globalCountry.currency;
+    const localAmt = parseFloat(amount);
+    // 一旦JPYに換算（基軸）
+    const jpyVal = localAmt * getRate(localCur);
+    // 言語別の母国通貨マッピング
+    const langToCurrency = { ja:"JPY", en:"USD", zh:"CNY", ko:"KRW", es:"EUR", pt:"BRL" };
+    const langToSymbol = { JPY:"¥", USD:"$", CNY:"¥", KRW:"₩", EUR:"€", BRL:"R$" };
+    const langToLabel = { ja:"円", en:"USD", zh:"元", ko:"원", es:"EUR", pt:"BRL" };
+    const primary = langToCurrency[lang] || "JPY";
+    // 現地通貨 = 言語の母国通貨の場合は表示不要
+    if (primary === localCur) return null;
+    const items = [];
+    // 母国通貨
+    const rate = getRate(primary);
+    const val = Math.round(jpyVal / rate).toLocaleString();
+    items.push(`${langToSymbol[primary]}${val} ${langToLabel[lang]}`);
+    // USDは必ず追加（母国通貨がUSDでない、かつ現地通貨もUSDでない場合）
+    if (primary !== "USD" && localCur !== "USD") {
+      const usdRate = getRate("USD");
+      const usdVal = Math.round(jpyVal / usdRate).toLocaleString();
+      items.push(`$${usdVal} USD`);
+    }
+    return items.length > 0 ? "≈ " + items.join(" / ") : null;
+  };
+  const conversionText = displayConversion();
   const canJudge = globalCountry && city && mainCat && subCatJa && parseFloat(amount) > 0;
 
   const runJudge = () => {
@@ -12199,7 +12229,7 @@ export default function App() {
                         <div style={{ background:S.pink, color:"#fff", padding:"6px 11px", borderRadius:9, fontSize:12, fontWeight:700 }}>{globalCountry?.currency || "--"}</div>
                         <input type="number" value={amount} onChange={e => { setAmount(e.target.value); setResult(null); }} placeholder="0" style={{ flex:1, background:"none", border:"none", outline:"none", fontSize:32, fontFamily:"Georgia,serif", color:"#ffffff", minWidth:0 }} />
                       </div>
-                      {jpy && parseFloat(amount)>0 && <div style={{ fontSize:12, color:S.muted, marginTop:7, paddingTop:7, borderTop:`1px solid ${S.border}` }}>{t.approx(jpy)}</div>}
+                      {conversionText && <div style={{ fontSize:12, color:S.muted, marginTop:7, paddingTop:7, borderTop:`1px solid ${S.border}` }}>{conversionText}</div>}
                     </div>
                     <button onClick={runJudge} disabled={!canJudge} style={{ width:"100%", background:canJudge?"linear-gradient(135deg,#ff8c42,#ffb380)":"rgba(255,255,255,0.15)", color:"#fff", border:"1px solid rgba(255,255,255,0.25)", borderRadius:13, padding:15, fontSize:14, fontWeight:700, cursor:canJudge?"pointer":"not-allowed", boxShadow:canJudge?"0 4px 20px rgba(255,140,66,0.4)":"none" }}>{t.judge}</button>
                   </>
